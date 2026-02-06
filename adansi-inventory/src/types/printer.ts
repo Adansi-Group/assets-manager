@@ -1,11 +1,40 @@
 
+// src/types/printer.ts
 
 
-export type Printer = {
-  id: number;
-  location: string;
-  printerType: string;
-  quantity: number;
-  status: string;
-  date: string;
+
+
+
+// src/types/printer.ts
+
+export type PrinterColor = "white" | "black" | "gray";
+
+export type TonerColor = "Black" | "Cyan" | "Magenta" | "Yellow";
+
+export type TonerLevel = {
+  color: TonerColor;
+  currentPercentage: number;
+  lastChecked: string;
+  lastReplaced: string;
 };
+
+export interface Printer {
+  id: string;
+  location: string;
+  model: string;
+  printerColorType: PrinterColor;
+  quantity: number;
+  accessories: string[];
+  status: "Active" | "In Repair" | "Retired";
+  date: string;
+  
+  // Toner tracking (optional)
+  tonerLevels?: TonerLevel[];
+  hasTonerTracking?: boolean;
+}
+
+
+
+
+
+

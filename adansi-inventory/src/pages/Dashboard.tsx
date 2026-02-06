@@ -1,3 +1,14 @@
+
+
+
+
+
+
+
+
+
+
+
 import { useEffect, useState } from "react";
 import {
   Printer,
@@ -6,6 +17,7 @@ import {
   Users,
   Smartphone,
   Laptop,
+  RefreshCw,
 } from "lucide-react";
 import {
   BarChart,
@@ -18,6 +30,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { getPrinters } from "../services/printerService";
 import type { Gadget } from "../types/gadget";
 
 export default function Dashboard() {
@@ -34,7 +47,54 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    const printers = JSON.parse(localStorage.getItem("printers") || "[]");
+    // Function to load all data
+    const loadData = async () => {
+      // Fetch printers from Firebase
+      const printers = await getPrinters();
+      
+      // Fetch other data from localStorage
+      const toners = JSON.parse(localStorage.getItem("toners") || "[]");
+      const gadgets: Gadget[] = JSON.parse(
+        localStorage.getItem("gadgets") || "[]"
+      );
+
+      console.log("Loading data - Printers:", printers);
+      console.log("Loading data - Toners:", toners);
+      console.log("Loading data - Gadgets:", gadgets);
+
+      setPrinterCount(printers.length);
+      setTonerCount(toners.length);
+
+      setPhonesCount(
+        gadgets.filter(g => g.deviceType === "Smartphone").length
+      );
+      setLaptopsCount(
+        gadgets.filter(g => g.deviceType === "Laptop").length
+      );
+
+      setRecentGadgets(gadgets.slice(-5).reverse());
+
+      setStatusSummary({
+        inStock: gadgets.filter(g => g.status === "In-Stock").length,
+        inUse: gadgets.filter(g => g.status === "In-Use").length,
+        faulty: gadgets.filter(g => g.status === "Faulty").length,
+      });
+    };
+
+    // Load data immediately
+    loadData();
+
+    // Also reload when window gains focus (user returns to tab)
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+
+    // Cleanup
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // Add a function to manually refresh data
+  const refreshData = async () => {
+    const printers = await getPrinters();
     const toners = JSON.parse(localStorage.getItem("toners") || "[]");
     const gadgets: Gadget[] = JSON.parse(
       localStorage.getItem("gadgets") || "[]"
@@ -42,14 +102,8 @@ export default function Dashboard() {
 
     setPrinterCount(printers.length);
     setTonerCount(toners.length);
-
-    setPhonesCount(
-      gadgets.filter(g => g.deviceType === "Smartphone").length
-    );
-    setLaptopsCount(
-      gadgets.filter(g => g.deviceType === "Laptop").length
-    );
-
+    setPhonesCount(gadgets.filter(g => g.deviceType === "Smartphone").length);
+    setLaptopsCount(gadgets.filter(g => g.deviceType === "Laptop").length);
     setRecentGadgets(gadgets.slice(-5).reverse());
 
     setStatusSummary({
@@ -57,7 +111,7 @@ export default function Dashboard() {
       inUse: gadgets.filter(g => g.status === "In-Use").length,
       faulty: gadgets.filter(g => g.status === "Faulty").length,
     });
-  }, []);
+  };
 
   const stats = [
     {
@@ -119,6 +173,17 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Refresh Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={refreshData}
+          className="p-2 bg-green-700 text-white rounded-lg hover:bg-green-800 transition-all hover:rotate-180"
+          title="Refresh Data"
+        >
+          <RefreshCw size={20} />
+        </button>
+      </div>
+
       {/* TOP CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {stats.map(s => {
@@ -265,8 +330,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-
-
-
-

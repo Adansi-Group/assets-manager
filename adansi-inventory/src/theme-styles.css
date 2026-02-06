@@ -1,0 +1,148 @@
+
+
+/* Global Styles with Theme Support */
+
+/* Default Theme (Green accent - your current theme) */
+:root.theme-default,
+:root {
+  --color-primary: 22 163 74; /* green-600 */
+  --color-primary-hover: 21 128 61; /* green-700 */
+  --color-primary-light: 220 252 231; /* green-50 */
+  --color-bg: 255 255 255; /* white */
+  --color-bg-secondary: 249 250 251; /* gray-50 */
+  --color-text: 17 24 39; /* gray-900 */
+  --color-text-secondary: 107 114 128; /* gray-500 */
+  --color-border: 229 231 235; /* gray-200 */
+  --color-card: 255 255 255; /* white */
+  --color-sidebar: 22 163 74; /* green-600 */
+  --color-sidebar-hover: 21 128 61; /* green-700 */
+}
+
+/* Light Theme (Blue accent) */
+:root.theme-light {
+  --color-primary: 37 99 235; /* blue-600 */
+  --color-primary-hover: 29 78 216; /* blue-700 */
+  --color-primary-light: 239 246 255; /* blue-50 */
+  --color-bg: 255 255 255; /* white */
+  --color-bg-secondary: 248 250 252; /* slate-50 */
+  --color-text: 15 23 42; /* slate-900 */
+  --color-text-secondary: 100 116 139; /* slate-500 */
+  --color-border: 226 232 240; /* slate-200 */
+  --color-card: 255 255 255; /* white */
+  --color-sidebar: 37 99 235; /* blue-600 */
+  --color-sidebar-hover: 29 78 216; /* blue-700 */
+}
+
+/* Dark Theme */
+:root.theme-dark {
+  --color-primary: 34 197 94; /* green-500 */
+  --color-primary-hover: 22 163 74; /* green-600 */
+  --color-primary-light: 20 83 45; /* green-900 */
+  --color-bg: 17 24 39; /* gray-900 */
+  --color-bg-secondary: 31 41 55; /* gray-800 */
+  --color-text: 243 244 246; /* gray-100 */
+  --color-text-secondary: 156 163 175; /* gray-400 */
+  --color-border: 55 65 81; /* gray-700 */
+  --color-card: 31 41 55; /* gray-800 */
+  --color-sidebar: 31 41 55; /* gray-800 */
+  --color-sidebar-hover: 55 65 81; /* gray-700 */
+}
+
+/* Apply theme colors */
+body {
+  background-color: rgb(var(--color-bg));
+  color: rgb(var(--color-text));
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Utility classes for themed components */
+.bg-primary {
+  background-color: rgb(var(--color-primary));
+}
+
+.bg-primary-hover:hover {
+  background-color: rgb(var(--color-primary-hover));
+}
+
+.bg-primary-light {
+  background-color: rgb(var(--color-primary-light));
+}
+
+.text-primary {
+  color: rgb(var(--color-primary));
+}
+
+.border-primary {
+  border-color: rgb(var(--color-primary));
+}
+
+.themed-bg {
+  background-color: rgb(var(--color-bg));
+}
+
+.themed-bg-secondary {
+  background-color: rgb(var(--color-bg-secondary));
+}
+
+.themed-card {
+  background-color: rgb(var(--color-card));
+}
+
+.themed-text {
+  color: rgb(var(--color-text));
+}
+
+.themed-text-secondary {
+  color: rgb(var(--color-text-secondary));
+}
+
+.themed-border {
+  border-color: rgb(var(--color-border));
+}
+
+/* Smooth transitions */
+* {
+  transition-property: background-color, border-color, color;
+  transition-duration: 200ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* Dark mode overrides for specific elements */
+.theme-dark input,
+.theme-dark select,
+.theme-dark textarea {
+  background-color: rgb(var(--color-bg-secondary));
+  color: rgb(var(--color-text));
+  border-color: rgb(var(--color-border));
+}
+
+.theme-dark input:focus,
+.theme-dark select:focus,
+.theme-dark textarea:focus {
+  border-color: rgb(var(--color-primary));
+  ring-color: rgb(var(--color-primary));
+}
+
+.theme-dark .hover\:bg-gray-50:hover {
+  background-color: rgb(55 65 81); /* gray-700 */
+}
+
+.theme-dark .bg-gray-100 {
+  background-color: rgb(55 65 81); /* gray-700 */
+}
+
+.theme-dark .bg-white {
+  background-color: rgb(31 41 55); /* gray-800 */
+}
+
+.theme-dark .text-gray-900 {
+  color: rgb(243 244 246); /* gray-100 */
+}
+
+.theme-dark .text-gray-600 {
+  color: rgb(156 163 175); /* gray-400 */
+}
+
+.theme-dark .border-gray-200 {
+  border-color: rgb(55 65 81); /* gray-700 */
+}

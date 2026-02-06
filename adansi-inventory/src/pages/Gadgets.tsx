@@ -1,21 +1,28 @@
 
-// src/pages/gadgets/Laptops.tsx
+
+
+
+
+
+
+
+// src/pages/Gadgets.tsx
 
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import AddGadgetModal from "../../components/AddGadgetModal";
-import type { Gadget, GadgetStatus } from "../../types/gadget";
+import AddGadgetModal from "../components/AddGadgetModal";
+import type { Gadget, GadgetStatus } from "../types/gadget";
 import {
-  getGadgetsByType,
+  getGadgets,
   addGadget,
   updateGadget,
   deleteGadget,
-} from "../../services/gadgetsService";
+} from "../services/gadgetsService";
 import Swal from "sweetalert2";
-import { Download, Laptop as LaptopIcon } from "lucide-react";
+import { Download, Smartphone, Laptop } from "lucide-react";
 
-export default function Laptops() {
-  const [laptops, setLaptops] = useState<Gadget[]>([]);
+export default function Gadgets() {
+  const [gadgets, setGadgets] = useState<Gadget[]>([]);
   const [editing, setEditing] = useState<Gadget | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -24,17 +31,17 @@ export default function Laptops() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const isAddOpen = location.pathname === "/gadgets/laptops/add";
+  const isAddOpen = location.pathname === "/gadgets/add";
 
-  async function loadLaptops() {
+  async function loadGadgets() {
     setLoading(true);
-    const data = await getGadgetsByType("Laptop");
-    setLaptops(data);
+    const data = await getGadgets();
+    setGadgets(data);
     setLoading(false);
   }
 
   useEffect(() => {
-    loadLaptops();
+    loadGadgets();
   }, []);
 
   async function handleSave(gadget: Gadget | Omit<Gadget, "id">) {
@@ -45,13 +52,13 @@ export default function Laptops() {
         await addGadget(gadget);
       }
 
-      await loadLaptops();
+      await loadGadgets();
       setEditing(null);
-      navigate("/gadgets/laptops");
+      navigate("/gadgets");
 
       Swal.fire({
         icon: "success",
-        title: "id" in gadget ? "Laptop Updated" : "Laptop Added",
+        title: "id" in gadget ? "Gadget Updated" : "Gadget Added",
         timer: 1500,
         showConfirmButton: false,
       });
@@ -59,12 +66,12 @@ export default function Laptops() {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: "Failed to save laptop",
+        text: "Failed to save gadget",
       });
     }
   }
 
-  async function handleStatusChange(laptop: Gadget) {
+  async function handleStatusChange(gadget: Gadget) {
     const { value: newStatus } = await Swal.fire({
       title: "Change Status",
       input: "select",
@@ -73,22 +80,22 @@ export default function Laptops() {
         "In-Use": "In-Use",
         Faulty: "Faulty",
       },
-      inputValue: laptop.status,
+      inputValue: gadget.status,
       showCancelButton: true,
       confirmButtonColor: "#16a34a",
       confirmButtonText: "Update",
     });
 
     if (newStatus) {
-      let assignedTo = laptop.assignedTo;
-      let assignedDate = laptop.assignedDate;
+      let assignedTo = gadget.assignedTo;
+      let assignedDate = gadget.assignedDate;
 
       if (newStatus === "In-Use") {
         const { value: employee } = await Swal.fire({
           title: "Assign To",
           input: "text",
           inputPlaceholder: "Employee name",
-          inputValue: laptop.assignedTo || "",
+          inputValue: gadget.assignedTo || "",
           showCancelButton: true,
         });
 
@@ -101,15 +108,15 @@ export default function Laptops() {
         assignedDate = undefined;
       }
 
-      const updatedLaptop: Gadget = {
-        ...laptop,
+      const updatedGadget: Gadget = {
+        ...gadget,
         status: newStatus as GadgetStatus,
         assignedTo,
         assignedDate,
       };
 
-      await updateGadget(updatedLaptop);
-      await loadLaptops();
+      await updateGadget(updatedGadget);
+      await loadGadgets();
 
       Swal.fire({
         icon: "success",
@@ -123,7 +130,7 @@ export default function Laptops() {
   async function handleRemove(id: string) {
     const result = await Swal.fire({
       title: "Are you sure?",
-      text: "This laptop will be permanently deleted",
+      text: "This gadget will be permanently deleted",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#16a34a",
@@ -133,11 +140,11 @@ export default function Laptops() {
 
     if (result.isConfirmed) {
       await deleteGadget(id);
-      await loadLaptops();
+      await loadGadgets();
 
       Swal.fire({
         title: "Deleted!",
-        text: "Laptop has been deleted.",
+        text: "Gadget has been deleted.",
         icon: "success",
         timer: 1500,
         showConfirmButton: false,
@@ -148,6 +155,7 @@ export default function Laptops() {
   function exportCSV() {
     const csv = [
       [
+        "Device Type",
         "Model",
         "Serial Number",
         "Processor",
@@ -157,15 +165,16 @@ export default function Laptops() {
         "Assigned To",
         "Assigned Date",
       ],
-      ...filtered.map((l) => [
-        l.model,
-        l.serialNumber,
-        l.processor || "",
-        l.storage || "",
-        l.year,
-        l.status,
-        l.assignedTo || "",
-        l.assignedDate || "",
+      ...filtered.map((g) => [
+        g.deviceType,
+        g.model,
+        g.serialNumber,
+        g.processor || "",
+        g.storage || "",
+        g.year,
+        g.status,
+        g.assignedTo || "",
+        g.assignedDate || "",
       ]),
     ]
       .map((r) => r.join(","))
@@ -175,30 +184,33 @@ export default function Laptops() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `laptops_${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `gadgets_${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
   }
 
-  const filtered = laptops.filter((l) => {
-    const matchesSearch = `${l.model} ${l.serialNumber} ${l.assignedTo || ""}`
+  const filtered = gadgets.filter((g) => {
+    const matchesSearch = `${g.model} ${g.serialNumber} ${g.deviceType} ${g.assignedTo || ""}`
       .toLowerCase()
       .includes(search.toLowerCase());
 
-    const matchesStatus = statusFilter === "All" || l.status === statusFilter;
+    const matchesStatus = statusFilter === "All" || g.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
 
-  const inStock = laptops.filter((l) => l.status === "In-Stock").length;
-  const inUse = laptops.filter((l) => l.status === "In-Use").length;
-  const faulty = laptops.filter((l) => l.status === "Faulty").length;
+  const totalGadgets = gadgets.length;
+  const laptops = gadgets.filter((g) => g.deviceType === "Laptop").length;
+  const phones = gadgets.filter((g) => g.deviceType === "Smartphone").length;
+  const inStock = gadgets.filter((g) => g.status === "In-Stock").length;
+  const inUse = gadgets.filter((g) => g.status === "In-Use").length;
+  const faulty = gadgets.filter((g) => g.status === "Faulty").length;
 
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center h-96">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading laptops...</p>
+          <p className="mt-4 text-gray-600">Loading gadgets...</p>
         </div>
       </div>
     );
@@ -207,8 +219,10 @@ export default function Laptops() {
   return (
     <div className="p-6 space-y-6">
       {/* DASHBOARD CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat title="Total Laptops" value={laptops.length} icon={<LaptopIcon size={20} />} />
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <Stat title="Total Gadgets" value={totalGadgets} />
+        <Stat title="Laptops" value={laptops} icon={<Laptop size={20} />} />
+        <Stat title="Phones" value={phones} icon={<Smartphone size={20} />} />
         <Stat title="In Stock" value={inStock} color="text-green-600" />
         <Stat title="In Use" value={inUse} color="text-blue-600" />
         <Stat title="Faulty" value={faulty} color="text-red-600" />
@@ -218,7 +232,7 @@ export default function Laptops() {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex gap-4 w-full md:w-auto">
           <input
-            placeholder="Search laptops..."
+            placeholder="Search gadgets..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="border rounded-lg px-4 py-2 flex-1 md:w-72"
@@ -246,10 +260,10 @@ export default function Laptops() {
           </button>
 
           <button
-            onClick={() => navigate("/gadgets/laptops/add")}
+            onClick={() => navigate("/gadgets/add")}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
           >
-            Add Laptop
+            Add Gadget
           </button>
         </div>
       </div>
@@ -260,6 +274,7 @@ export default function Laptops() {
           <thead className="bg-gray-100">
             <tr>
               {[
+                "Device Type",
                 "Model",
                 "Serial Number",
                 "Processor",
@@ -277,36 +292,39 @@ export default function Laptops() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((l) => (
-              <tr key={l.id} className="border-t hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium">{l.model}</td>
-                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{l.serialNumber}</td>
-                <td className="px-4 py-3 text-gray-600">{l.processor || "—"}</td>
-                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{l.storage || "—"}</td>
-                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{l.year}</td>
+            {filtered.map((g) => (
+              <tr key={g.id} className="border-t hover:bg-gray-50">
                 <td className="px-4 py-3 whitespace-nowrap">
-                  <button onClick={() => handleStatusChange(l)}>
-                    <StatusBadge status={l.status} />
+                  <DeviceTypeBadge type={g.deviceType} />
+                </td>
+                <td className="px-4 py-3 font-medium">{g.model}</td>
+                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{g.serialNumber}</td>
+                <td className="px-4 py-3 text-gray-600">{g.processor || "—"}</td>
+                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{g.storage || "—"}</td>
+                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{g.year}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <button onClick={() => handleStatusChange(g)}>
+                    <StatusBadge status={g.status} />
                   </button>
                 </td>
                 <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                  {l.assignedTo || "—"}
+                  {g.assignedTo || "—"}
                 </td>
                 <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                  {l.assignedDate || "—"}
+                  {g.assignedDate || "—"}
                 </td>
                 <td className="px-4 py-3 space-x-3 whitespace-nowrap">
                   <button
                     onClick={() => {
-                      setEditing(l);
-                      navigate("/gadgets/laptops/add");
+                      setEditing(g);
+                      navigate("/gadgets/add");
                     }}
                     className="text-blue-600 hover:text-blue-800"
                   >
                     Edit
                   </button>
                   <button
-                    onClick={() => handleRemove(l.id)}
+                    onClick={() => handleRemove(g.id)}
                     className="text-red-600 hover:text-red-800"
                   >
                     Delete
@@ -317,10 +335,10 @@ export default function Laptops() {
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center py-8 text-gray-400">
+                <td colSpan={10} className="text-center py-8 text-gray-400">
                   {search || statusFilter !== "All"
-                    ? "No laptops found"
-                    : "No laptops yet. Add your first laptop!"}
+                    ? "No gadgets found"
+                    : "No gadgets yet. Add your first gadget!"}
                 </td>
               </tr>
             )}
@@ -331,12 +349,11 @@ export default function Laptops() {
       {/* ADD/EDIT MODAL */}
       {isAddOpen && (
         <AddGadgetModal
-          deviceType="Laptop"
           existing={editing || undefined}
           onSave={handleSave}
           onClose={() => {
             setEditing(null);
-            navigate("/gadgets/laptops");
+            navigate("/gadgets");
           }}
         />
       )}
@@ -375,4 +392,15 @@ function StatusBadge({ status }: { status: GadgetStatus }) {
   );
 }
 
+function DeviceTypeBadge({ type }: { type: "Laptop" | "Smartphone" }) {
+  const colors = {
+    Laptop: "bg-purple-100 text-purple-700",
+    Smartphone: "bg-indigo-100 text-indigo-700",
+  };
 
+  return (
+    <span className={`px-3 py-1 rounded-full text-xs font-medium ${colors[type]}`}>
+      {type}
+    </span>
+  );
+}
