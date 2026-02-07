@@ -6,6 +6,7 @@
 
 
 
+
 import { useEffect, useState } from "react";
 import Swal from "sweetalert2";
 import AddPrinterModal from "../components/AddPrinterModal";
@@ -19,6 +20,7 @@ import {
   deletePrinter,
 } from "../services/printerService";
 import { addTonerReplacement } from "../services/Tonerreplacementservice";
+import { checkAndNotifyTonerLevel } from "../utils/notificationsHelper";
 import { Droplets, AlertTriangle, Eye } from "lucide-react";
 
 const ITEMS_PER_PAGE = 5;
@@ -36,6 +38,14 @@ export default function Printers() {
   async function loadPrinters() {
     const data = await getPrinters();
     setPrinters(data);
+    
+    // Check toner levels and create notifications
+    console.log('Checking printer toner levels for notifications...');
+    for (const printer of data) {
+      if (printer.hasTonerTracking && printer.tonerLevels) {
+        await checkAndNotifyTonerLevel(printer, 20);
+      }
+    }
   }
 
   useEffect(() => {
@@ -224,7 +234,7 @@ export default function Printers() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className="border rounded-lg px-4 py-2 w-72"
+          className="border rounded-lg px-4 py-2 w-72 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
         />
 
         <button
@@ -260,7 +270,7 @@ export default function Printers() {
             )}
 
             {paginated.map((p) => (
-              <tr key={p.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700">
+              <tr key={p.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700 dark:border-gray-700">
                 <td className="p-4">{p.location}</td>
                 <td className="p-4">{p.model}</td>
                 <td className="p-4">{p.printerColorType}</td>
@@ -282,13 +292,13 @@ export default function Printers() {
                 <td className="p-4 space-x-3">
                   <button
                     onClick={() => setEditing(p)}
-                    className="text-blue-600 hover:text-blue-800"
+                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleRemove(p.id)}
-                    className="text-red-600 hover:text-red-800"
+                    className="text-red-600 hover:text-red-800 dark:text-red-400"
                   >
                     Delete
                   </button>
@@ -308,7 +318,7 @@ export default function Printers() {
               className={`px-4 py-2 rounded ${
                 page === i + 1
                   ? "bg-green-600 text-white"
-                  : "border hover:bg-gray-100"
+                  : "border hover:bg-gray-100 dark:hover:bg-gray-700 dark:border-gray-600"
               }`}
             >
               {i + 1}
@@ -463,6 +473,20 @@ function TonerLevelBadge({ toner }: { toner: TonerLevel }) {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

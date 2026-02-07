@@ -28,6 +28,7 @@ import {
   Wifi,
   FileText,
   Settings as SettingsIcon,
+  BarChart3,
 } from "lucide-react";
 
 export default function AdminLayout() {
@@ -303,6 +304,20 @@ export default function AdminLayout() {
           >
             <FileText size={18} />
             A4 Sheets
+          </Link>
+
+
+          {/* Reports */}
+          <Link
+            to="/reports"
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg ${
+              isActive("/reports")
+                ? "bg-green-600 dark:bg-gray-700"
+                : "hover:bg-green-800 dark:hover:bg-gray-700"
+            }`}
+          >
+            <BarChart3 size={18} />
+            Reports
           </Link>
 
           {/* Settings */}

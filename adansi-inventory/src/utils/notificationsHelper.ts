@@ -1,6 +1,6 @@
 // src/utils/notificationHelper.ts
 
-import { createNotification } from "../services/notificationService";
+import { createNotification, getNotifications } from "../services/notificationService";
 
 export async function addNotification(
   type: "toner" | "gadget" | "internet" | "a4_sheet",
@@ -57,6 +57,17 @@ export async function checkAndNotifyTonerLevel(
 
     // Only notify if below threshold and hasn't been notified recently
     if (percentage <= threshold && percentage > 0) {
+      // CHECK IF NOTIFICATION ALREADY EXISTS to prevent duplicates
+      const existingNotifications = await getNotifications();
+      const alreadyNotified = existingNotifications.some(
+        n => n.itemId === toner.id && n.type === 'toner' && !n.read
+      );
+      
+      if (alreadyNotified) {
+        console.log(`[Notification] Skipping - notification already exists for ${toner.colorType} toner`);
+        return;
+      }
+      
       const severity = percentage <= 10 ? "critical" : "low";
       
       await addNotification(
@@ -113,6 +124,17 @@ export async function checkAndNotifyInternetExpiration(
 
     // Notify if within threshold OR already exhausted
     if (daysRemaining <= daysThreshold) {
+      // CHECK IF NOTIFICATION ALREADY EXISTS to prevent duplicates
+      const existingNotifications = await getNotifications();
+      const alreadyNotified = existingNotifications.some(
+        n => n.itemId === usage.id && n.type === 'internet' && !n.read
+      );
+      
+      if (alreadyNotified) {
+        console.log(`[Notification] Skipping - notification already exists for ${usage.officeName}`);
+        return;
+      }
+      
       let severity: "low" | "critical" | "info";
       let message: string;
       
@@ -182,9 +204,6 @@ export function triggerNotificationUpdate() {
   window.dispatchEvent(new CustomEvent("notification-added"));
   window.dispatchEvent(new Event('storage'));
 }
-
-
-
 
 
 

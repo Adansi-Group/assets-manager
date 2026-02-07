@@ -15,7 +15,9 @@ import Profile from "./pages/Profile";
 import ReplacementHistory from "./pages/Replacementhistory";
 import Settings from "./pages/Settings";
 import A4Sheets from "./pages/A4Sheet";
-
+import Reports from "./pages/Reports";
+import TonerReports from "./pages/TonerReports";
+import ConsolidatedReport from "./pages/ConsolidatedReport";
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -73,6 +75,11 @@ export default function App() {
           {/* INTERNET USAGE */}
           <Route path="/internet-usage" element={<InternetUsage />} />
           <Route path="/internet-usage/add" element={<InternetUsage />} />
+
+          {/* Reports Routes */}
+          <Route path="reports" element={<Reports />} />
+          <Route path="reports/toners" element={<TonerReports />} />
+          <Route path="reports/consolidated" element={<ConsolidatedReport />} />
 
           {/* A4 SHEETS */}
           <Route path="/a4-sheets" element={<A4Sheets />} />
