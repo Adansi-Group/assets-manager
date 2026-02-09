@@ -3,7 +3,12 @@
 
 
 
+
+
+
+
 // src/services/notificationService.ts
+// ✅ NO TWILIO - Mock SMS implementation
 
 import {
   collection,
@@ -14,11 +19,21 @@ import {
   orderBy,
   updateDoc,
   doc,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
+import emailjs from '@emailjs/browser';
 
 const NOTIFICATIONS_COLLECTION = "notifications";
 const SETTINGS_COLLECTION = "notification_settings";
+
+// EmailJS Configuration
+const EMAILJS_SERVICE_ID = "service_hafgg6k";
+const EMAILJS_TEMPLATE_ID = "template_h6q6rd6";
+const EMAILJS_PUBLIC_KEY = "aOwp7WMRCyqarRbCk";
+
+// Initialize EmailJS
+emailjs.init(EMAILJS_PUBLIC_KEY);
 
 export interface Notification {
   id: string;
@@ -30,7 +45,9 @@ export interface Notification {
   itemName: string;
   read: boolean;
   emailSent: boolean;
+  emailsSentTo: string[];
   smsSent: boolean;
+  smssSentTo: string[];
   createdAt: string;
 }
 
@@ -38,19 +55,19 @@ export interface NotificationSettings {
   id?: string;
   emailEnabled: boolean;
   smsEnabled: boolean;
-  email?: string;
-  phoneNumber?: string;
+  emails: string[];
+  phoneNumbers: string[];
   thresholds: {
-    toner: number; // percentage (e.g., 20%)
-    gadget: number; // quantity
-    internet: number; // days remaining
-    a4Sheet: number; // quantity/percentage
+    toner: number;
+    gadget: number;
+    internet: number;
+    a4Sheet: number;
   };
 }
 
 // CREATE NOTIFICATION
 export async function createNotification(
-  notification: Omit<Notification, "id" | "read" | "emailSent" | "smsSent" | "createdAt">
+  notification: Omit<Notification, "id" | "read" | "emailSent" | "emailsSentTo" | "smsSent" | "smssSentTo" | "createdAt">
 ): Promise<void> {
   try {
     const settings = await getNotificationSettings();
@@ -59,27 +76,141 @@ export async function createNotification(
       ...notification,
       read: false,
       emailSent: false,
+      emailsSentTo: [],
       smsSent: false,
+      smssSentTo: [],
       createdAt: new Date().toISOString(),
     };
 
     // Add to database
-    await addDoc(collection(db, NOTIFICATIONS_COLLECTION), newNotification);
+    const docRef = await addDoc(collection(db, NOTIFICATIONS_COLLECTION), newNotification);
+    console.log("✅ Notification created:", docRef.id);
 
-    // Send email if enabled
-    if (settings?.emailEnabled && settings?.email) {
-      await sendEmailNotification(newNotification, settings.email);
+    // Send emails to all recipients if enabled
+    if (settings?.emailEnabled && settings?.emails?.length > 0) {
+      console.log(`📧 Sending email notifications to ${settings.emails.length} recipient(s)...`);
+      
+      const successfulEmails = await sendEmailsToAll(
+        settings.emails,
+        newNotification
+      );
+      
+      if (successfulEmails.length > 0) {
+        await updateDoc(doc(db, NOTIFICATIONS_COLLECTION, docRef.id), {
+          emailSent: true,
+          emailsSentTo: successfulEmails,
+        });
+        console.log(`✅ Emails sent successfully to: ${successfulEmails.join(", ")}`);
+      }
     }
 
-    // Send SMS if enabled
-    if (settings?.smsEnabled && settings?.phoneNumber) {
-      await sendSMSNotification(newNotification, settings.phoneNumber);
+    // Send SMS to all phone numbers if enabled (MOCK)
+    if (settings?.smsEnabled && settings?.phoneNumbers?.length > 0) {
+      console.log(`📱 SMS WOULD be sent to ${settings.phoneNumbers.length} recipient(s):`);
+      
+      const successfulSMS = await sendSMSToAll(
+        settings.phoneNumbers,
+        newNotification
+      );
+      
+      if (successfulSMS.length > 0) {
+        await updateDoc(doc(db, NOTIFICATIONS_COLLECTION, docRef.id), {
+          smsSent: true,
+          smssSentTo: successfulSMS,
+        });
+        console.log(`📱 SMS MOCK sent to: ${successfulSMS.join(", ")}`);
+      }
     }
 
-    console.log("Notification created successfully");
+    // Trigger event for real-time UI updates
+    window.dispatchEvent(new CustomEvent("notification-added"));
   } catch (error) {
-    console.error("Error creating notification:", error);
+    console.error("❌ Error creating notification:", error);
     throw error;
+  }
+}
+
+// ✅ MOCK SMS - No actual sending (replace with real SMS provider later)
+async function sendSMSToAll(
+  phoneNumbers: string[],
+  notification: Omit<Notification, "id">
+): Promise<string[]> {
+  const successfulSMS: string[] = [];
+  
+  // Create SMS message (keep under 160 chars)
+  const smsMessage = `${notification.severity.toUpperCase()}: ${notification.title}\n${notification.message}`;
+  
+  console.log('📱 ========== MOCK SMS ==========');
+  console.log(`   Message: ${smsMessage}`);
+  console.log('   Recipients:');
+  
+  // MOCK: Just log to console, mark all as successful
+  for (const phoneNumber of phoneNumbers) {
+    console.log(`   → ${phoneNumber}`);
+    successfulSMS.push(phoneNumber);
+  }
+  
+  console.log('================================');
+  console.log('💡 To enable real SMS, integrate with:');
+  console.log('   - Hubtel (Ghana): https://hubtel.com/');
+  console.log('   - Africa\'s Talking: https://africastalking.com/');
+  console.log('   - Twilio: https://twilio.com/');
+  console.log('================================');
+  
+  return successfulSMS;
+}
+
+// SEND EMAILS TO ALL RECIPIENTS
+async function sendEmailsToAll(
+  recipients: string[],
+  notification: Omit<Notification, "id">
+): Promise<string[]> {
+  const successfulEmails: string[] = [];
+  
+  for (const email of recipients) {
+    try {
+      const sent = await sendEmailNotification(email, notification);
+      if (sent) {
+        successfulEmails.push(email);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to send to ${email}:`, error);
+    }
+  }
+  
+  return successfulEmails;
+}
+
+// SEND EMAIL VIA EMAILJS
+async function sendEmailNotification(
+  recipientEmail: string,
+  notification: Omit<Notification, "id">
+): Promise<boolean> {
+  try {
+    const templateParams = {
+      email: recipientEmail,
+      subject: notification.title,
+      title: notification.title,
+      message: notification.message,
+      severity: notification.severity.toUpperCase(),
+      type: notification.type.toUpperCase(),
+      timestamp: new Date().toLocaleString(),
+    };
+
+    const response = await emailjs.send(
+      EMAILJS_SERVICE_ID,
+      EMAILJS_TEMPLATE_ID,
+      templateParams
+    );
+
+    if (response.status === 200) {
+      console.log("✅ Email sent to", recipientEmail);
+      return true;
+    }
+    return false;
+  } catch (error: any) {
+    console.error("❌ EmailJS error for", recipientEmail, ":", error);
+    return false;
   }
 }
 
@@ -122,6 +253,17 @@ export async function getUnreadNotifications(): Promise<Notification[]> {
   }
 }
 
+// GET UNREAD COUNT
+export async function getUnreadCount(): Promise<number> {
+  try {
+    const unread = await getUnreadNotifications();
+    return unread.length;
+  } catch (error) {
+    console.error("Error getting unread count:", error);
+    return 0;
+  }
+}
+
 // MARK NOTIFICATION AS READ
 export async function markAsRead(id: string): Promise<void> {
   try {
@@ -146,30 +288,82 @@ export async function markAllAsRead(): Promise<void> {
   }
 }
 
+// DELETE NOTIFICATION
+export async function deleteNotification(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, NOTIFICATIONS_COLLECTION, id));
+  } catch (error) {
+    console.error("Error deleting notification:", error);
+    throw error;
+  }
+}
+
+// DELETE ALL NOTIFICATIONS
+export async function deleteAllNotifications(): Promise<void> {
+  try {
+    const all = await getNotifications();
+    const promises = all.map((n) => deleteNotification(n.id));
+    await Promise.all(promises);
+    console.log(`✅ Deleted ${all.length} notifications`);
+  } catch (error) {
+    console.error("Error deleting all notifications:", error);
+    throw error;
+  }
+}
+
+// DELETE ALL READ NOTIFICATIONS
+export async function deleteAllReadNotifications(): Promise<void> {
+  try {
+    const all = await getNotifications();
+    const readOnes = all.filter(n => n.read);
+    const promises = readOnes.map((n) => deleteNotification(n.id));
+    await Promise.all(promises);
+    console.log(`✅ Deleted ${readOnes.length} read notifications`);
+  } catch (error) {
+    console.error("Error deleting read notifications:", error);
+    throw error;
+  }
+}
+
 // GET NOTIFICATION SETTINGS
 export async function getNotificationSettings(): Promise<NotificationSettings | null> {
   try {
     const snapshot = await getDocs(collection(db, SETTINGS_COLLECTION));
     
     if (snapshot.empty) {
-      // Return default settings
       return {
         emailEnabled: false,
         smsEnabled: false,
+        emails: [],
+        phoneNumbers: [],
         thresholds: {
-          toner: 20, // 20%
-          gadget: 5, // 5 units
-          internet: 7, // 7 days
-          a4Sheet: 10, // 10 reams
+          toner: 20,
+          gadget: 5,
+          internet: 7,
+          a4Sheet: 10,
         },
       };
     }
 
-    const doc = snapshot.docs[0];
-    return {
-      id: doc.id,
-      ...doc.data(),
-    } as NotificationSettings;
+    const docData = snapshot.docs[0];
+    const data = docData.data() as any;
+    
+    // Migration: Convert old formats to new array format
+    const settings: NotificationSettings = {
+      id: docData.id,
+      emailEnabled: data.emailEnabled || false,
+      smsEnabled: data.smsEnabled || false,
+      emails: Array.isArray(data.emails) ? data.emails : (data.email ? [data.email] : []),
+      phoneNumbers: Array.isArray(data.phoneNumbers) ? data.phoneNumbers : (data.phoneNumber ? [data.phoneNumber] : []),
+      thresholds: data.thresholds || {
+        toner: 20,
+        gadget: 5,
+        internet: 7,
+        a4Sheet: 10,
+      },
+    };
+    
+    return settings;
   } catch (error) {
     console.error("Error fetching notification settings:", error);
     return null;
@@ -184,152 +378,32 @@ export async function updateNotificationSettings(
     const snapshot = await getDocs(collection(db, SETTINGS_COLLECTION));
 
     if (snapshot.empty) {
-      // Create new settings
       await addDoc(collection(db, SETTINGS_COLLECTION), settings);
     } else {
-      // Update existing settings
       const docId = snapshot.docs[0].id;
       const { id, ...data } = settings;
       await updateDoc(doc(db, SETTINGS_COLLECTION, docId), data);
     }
 
-    console.log("Notification settings updated successfully");
+    console.log("✅ Notification settings updated");
+    console.log(`   Email: ${settings.emailEnabled ? 'Enabled' : 'Disabled'}`);
+    console.log(`   SMS: ${settings.smsEnabled ? 'Enabled (MOCK)' : 'Disabled'}`);
+    if (settings.emails.length > 0) {
+      console.log(`   Email recipients (${settings.emails.length}):`, settings.emails.join(", "));
+    }
+    if (settings.phoneNumbers.length > 0) {
+      console.log(`   SMS recipients (${settings.phoneNumbers.length}):`, settings.phoneNumbers.join(", "));
+    }
   } catch (error) {
     console.error("Error updating notification settings:", error);
     throw error;
   }
 }
 
-// SEND EMAIL NOTIFICATION (Mock - integrate with actual email service)
-async function sendEmailNotification(
-  notification: Omit<Notification, "id">,
-  email: string
-): Promise<void> {
-  try {
-    // TODO: Integrate with actual email service (e.g., SendGrid, AWS SES, etc.)
-    console.log(`📧 Email sent to ${email}:`, {
-      subject: notification.title,
-      body: notification.message,
-    });
 
-    // In production, you would call your email API here:
-    /*
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        personalizations: [{
-          to: [{ email }],
-          subject: notification.title,
-        }],
-        from: { email: 'noreply@yourdomain.com' },
-        content: [{
-          type: 'text/html',
-          value: `<h2>${notification.title}</h2><p>${notification.message}</p>`,
-        }],
-      }),
-    });
-    */
-  } catch (error) {
-    console.error("Error sending email:", error);
-  }
-}
 
-// SEND SMS NOTIFICATION (Mock - integrate with actual SMS service)
-async function sendSMSNotification(
-  notification: Omit<Notification, "id">,
-  phoneNumber: string
-): Promise<void> {
-  try {
-    // TODO: Integrate with actual SMS service (e.g., Twilio, AWS SNS, etc.)
-    console.log(`📱 SMS sent to ${phoneNumber}:`, notification.message);
 
-    // In production, you would call your SMS API here:
-    /*
-    const response = await fetch('https://api.twilio.com/2010-04-01/Accounts/YOUR_ACCOUNT_SID/Messages.json', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${btoa('YOUR_ACCOUNT_SID:YOUR_AUTH_TOKEN')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        To: phoneNumber,
-        From: 'YOUR_TWILIO_NUMBER',
-        Body: notification.message,
-      }),
-    });
-    */
-  } catch (error) {
-    console.error("Error sending SMS:", error);
-  }
-}
 
-// CHECK TONER LEVEL AND CREATE NOTIFICATION
-export async function checkTonerLevel(
-  toner: any,
-  threshold: number = 20
-): Promise<void> {
-  try {
-    // Calculate percentage
-    const percentage = (toner.quantity / (toner.initialQuantity || 1)) * 100;
 
-    if (percentage <= threshold && percentage > 0) {
-      await createNotification({
-        type: "toner",
-        severity: percentage <= 10 ? "critical" : "low",
-        title: `Low Toner Alert: ${toner.colorType}`,
-        message: `${toner.location} - ${toner.printerType} ${toner.colorType} toner is at ${Math.round(percentage)}% (${toner.quantity} remaining)`,
-        itemId: toner.id,
-        itemName: `${toner.location} - ${toner.tonerType} ${toner.colorType}`,
-      });
-    }
-  } catch (error) {
-    console.error("Error checking toner level:", error);
-  }
-}
 
-// CHECK A4 SHEET STOCK AND CREATE NOTIFICATION
-export async function checkA4SheetStock(sheet: any): Promise<void> {
-  try {
-    if (sheet.currentQuantity <= sheet.minimumStockLevel) {
-      await createNotification({
-        type: "a4_sheet",
-        severity: sheet.currentQuantity === 0 ? "critical" : "low",
-        title: `Low A4 Sheet Stock: ${sheet.officeName}`,
-        message: `${sheet.officeName} has ${sheet.currentQuantity} reams remaining (minimum: ${sheet.minimumStockLevel})`,
-        itemId: sheet.id,
-        itemName: `${sheet.officeName} - ${sheet.brand}`,
-      });
-    }
-  } catch (error) {
-    console.error("Error checking A4 sheet stock:", error);
-  }
-}
 
-// CHECK INTERNET USAGE AND CREATE NOTIFICATION
-export async function checkInternetUsage(usage: any, daysThreshold: number = 7): Promise<void> {
-  try {
-    if (usage.dateExhausted) {
-      const daysRemaining = Math.ceil(
-        (new Date(usage.dateExhausted).getTime() - new Date().getTime()) /
-          (1000 * 60 * 60 * 24)
-      );
-
-      if (daysRemaining <= daysThreshold && daysRemaining > 0) {
-        await createNotification({
-          type: "internet",
-          severity: daysRemaining <= 3 ? "critical" : "low",
-          title: `Internet Expiring Soon: ${usage.officeName}`,
-          message: `${usage.officeName} internet (${usage.provider}) expires in ${daysRemaining} days`,
-          itemId: usage.id,
-          itemName: `${usage.officeName} - ${usage.provider}`,
-        });
-      }
-    }
-  } catch (error) {
-    console.error("Error checking internet usage:", error);
-  }
-}

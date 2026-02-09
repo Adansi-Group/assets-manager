@@ -1,9 +1,15 @@
 
+
+
+
+
+
 // src/pages/gadgets/Laptops.tsx
 
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import AddGadgetModal from "../../components/AddGadgetModal";
+import GadgetsExcelImportModal from "../../components/ExcelImportModal";
 import type { Gadget, GadgetStatus } from "../../types/gadget";
 import {
   getGadgetsByType,
@@ -12,7 +18,7 @@ import {
   deleteGadget,
 } from "../../services/gadgetsService";
 import Swal from "sweetalert2";
-import { Download, Laptop as LaptopIcon } from "lucide-react";
+import { Download, Laptop as LaptopIcon, Upload } from "lucide-react";
 
 export default function Laptops() {
   const [laptops, setLaptops] = useState<Gadget[]>([]);
@@ -20,6 +26,7 @@ export default function Laptops() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<GadgetStatus | "All">("All");
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -60,6 +67,78 @@ export default function Laptops() {
         icon: "error",
         title: "Error",
         text: "Failed to save laptop",
+      });
+    }
+  }
+
+  async function handleImport(importedGadgets: Omit<Gadget, "id">[]) {
+    try {
+      // Filter only laptops
+      const laptopsOnly = importedGadgets.filter(g => g.deviceType === "Laptop");
+      
+      if (laptopsOnly.length === 0) {
+        Swal.fire({
+          icon: "warning",
+          title: "No Laptops Found",
+          text: "The Excel file contains no laptop entries.",
+        });
+        return;
+      }
+
+      console.log("Starting import of", laptopsOnly.length, "laptops");
+      
+      let successCount = 0;
+      let failCount = 0;
+      const errors: string[] = [];
+
+      for (const laptop of laptopsOnly) {
+        try {
+          console.log("Importing laptop:", laptop);
+          await addGadget(laptop);
+          successCount++;
+        } catch (err: any) {
+          failCount++;
+          console.error("Failed to import laptop:", laptop, err);
+          errors.push(`${laptop.model}: ${err.message}`);
+        }
+      }
+
+      await loadLaptops();
+      setShowImportModal(false);
+
+      const skipped = importedGadgets.length - laptopsOnly.length;
+
+      if (failCount > 0) {
+        Swal.fire({
+          icon: "warning",
+          title: "Partial Import",
+          html: `
+            <p>${successCount} laptop(s) imported successfully.</p>
+            <p class="text-red-600">${failCount} failed to import.</p>
+            ${skipped > 0 ? `<p class="text-yellow-600">${skipped} non-laptop item(s) were skipped.</p>` : ""}
+            <details class="mt-2 text-left text-sm">
+              <summary>Show errors</summary>
+              <ul class="mt-2 list-disc list-inside">
+                ${errors.map(e => `<li>${e}</li>`).join("")}
+              </ul>
+            </details>
+          `,
+        });
+      } else {
+        Swal.fire({
+          title: "Import Successful!",
+          html: `${successCount} laptop(s) imported successfully.${skipped > 0 ? `<br><small>${skipped} non-laptop item(s) were skipped.</small>` : ""}`,
+          icon: "success",
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      }
+    } catch (error: any) {
+      console.error("Import error:", error);
+      Swal.fire({
+        title: "Import Failed",
+        text: error.message || "An error occurred while importing laptops.",
+        icon: "error",
       });
     }
   }
@@ -238,6 +317,14 @@ export default function Laptops() {
 
         <div className="flex gap-3">
           <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 border px-4 py-2 rounded-lg hover:bg-gray-50"
+          >
+            <Upload size={18} />
+            Import Excel
+          </button>
+
+          <button
             onClick={exportCSV}
             className="flex items-center gap-2 border px-4 py-2 rounded-lg hover:bg-gray-50"
           >
@@ -340,6 +427,14 @@ export default function Laptops() {
           }}
         />
       )}
+
+      {/* IMPORT MODAL */}
+      {showImportModal && (
+        <GadgetsExcelImportModal
+          onClose={() => setShowImportModal(false)}
+          onImport={handleImport}
+        />
+      )}
     </div>
   );
 }
@@ -374,5 +469,3 @@ function StatusBadge({ status }: { status: GadgetStatus }) {
     </span>
   );
 }
-
-

@@ -1,8 +1,17 @@
+
+
+
+
+
+
+
+
 // src/pages/gadgets/Smartphones.tsx
 
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import AddGadgetModal from "../../components/AddGadgetModal";
+import GadgetsExcelImportModal from "../../components/ExcelImportModal";
 import type { Gadget, GadgetStatus } from "../../types/gadget";
 import {
   getGadgetsByType,
@@ -11,7 +20,7 @@ import {
   deleteGadget,
 } from "../../services/gadgetsService";
 import Swal from "sweetalert2";
-import { Download, Smartphone as PhoneIcon } from "lucide-react";
+import { Download, Smartphone as PhoneIcon, Upload } from "lucide-react";
 
 export default function Smartphones() {
   const [phones, setPhones] = useState<Gadget[]>([]);
@@ -19,6 +28,7 @@ export default function Smartphones() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<GadgetStatus | "All">("All");
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -59,6 +69,78 @@ export default function Smartphones() {
         icon: "error",
         title: "Error",
         text: "Failed to save phone",
+      });
+    }
+  }
+
+  async function handleImport(importedGadgets: Omit<Gadget, "id">[]) {
+    try {
+      // Filter only smartphones
+      const phonesOnly = importedGadgets.filter(g => g.deviceType === "Smartphone");
+      
+      if (phonesOnly.length === 0) {
+        Swal.fire({
+          icon: "warning",
+          title: "No Smartphones Found",
+          text: "The Excel file contains no smartphone entries.",
+        });
+        return;
+      }
+
+      console.log("Starting import of", phonesOnly.length, "smartphones");
+      
+      let successCount = 0;
+      let failCount = 0;
+      const errors: string[] = [];
+
+      for (const phone of phonesOnly) {
+        try {
+          console.log("Importing smartphone:", phone);
+          await addGadget(phone);
+          successCount++;
+        } catch (err: any) {
+          failCount++;
+          console.error("Failed to import smartphone:", phone, err);
+          errors.push(`${phone.model}: ${err.message}`);
+        }
+      }
+
+      await loadPhones();
+      setShowImportModal(false);
+
+      const skipped = importedGadgets.length - phonesOnly.length;
+
+      if (failCount > 0) {
+        Swal.fire({
+          icon: "warning",
+          title: "Partial Import",
+          html: `
+            <p>${successCount} smartphone(s) imported successfully.</p>
+            <p class="text-red-600">${failCount} failed to import.</p>
+            ${skipped > 0 ? `<p class="text-yellow-600">${skipped} non-smartphone item(s) were skipped.</p>` : ""}
+            <details class="mt-2 text-left text-sm">
+              <summary>Show errors</summary>
+              <ul class="mt-2 list-disc list-inside">
+                ${errors.map(e => `<li>${e}</li>`).join("")}
+              </ul>
+            </details>
+          `,
+        });
+      } else {
+        Swal.fire({
+          title: "Import Successful!",
+          html: `${successCount} smartphone(s) imported successfully.${skipped > 0 ? `<br><small>${skipped} non-smartphone item(s) were skipped.</small>` : ""}`,
+          icon: "success",
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      }
+    } catch (error: any) {
+      console.error("Import error:", error);
+      Swal.fire({
+        title: "Import Failed",
+        text: error.message || "An error occurred while importing smartphones.",
+        icon: "error",
       });
     }
   }
@@ -237,6 +319,14 @@ export default function Smartphones() {
 
         <div className="flex gap-3">
           <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 border px-4 py-2 rounded-lg hover:bg-gray-50"
+          >
+            <Upload size={18} />
+            Import Excel
+          </button>
+
+          <button
             onClick={exportCSV}
             className="flex items-center gap-2 border px-4 py-2 rounded-lg hover:bg-gray-50"
           >
@@ -339,6 +429,14 @@ export default function Smartphones() {
           }}
         />
       )}
+
+      {/* IMPORT MODAL */}
+      {showImportModal && (
+        <GadgetsExcelImportModal
+          onClose={() => setShowImportModal(false)}
+          onImport={handleImport}
+        />
+      )}
     </div>
   );
 }
@@ -373,5 +471,3 @@ function StatusBadge({ status }: { status: GadgetStatus }) {
     </span>
   );
 }
-
-

@@ -16,8 +16,12 @@ import ReplacementHistory from "./pages/Replacementhistory";
 import Settings from "./pages/Settings";
 import A4Sheets from "./pages/A4Sheet";
 import Reports from "./pages/Reports";
-import TonerReports from "./pages/TonerReports";
 import ConsolidatedReport from "./pages/ConsolidatedReport";
+import TonerReports from "./pages/TonerReports";
+import GadgetReports from "./pages/Gadgetreports";
+import InternetReports from "./pages/Internetreports";
+import A4SheetReports from "./pages/A4sheetreports";
+import BudgetAnalysis from "./pages/Budgetanalysis";
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -76,10 +80,17 @@ export default function App() {
           <Route path="/internet-usage" element={<InternetUsage />} />
           <Route path="/internet-usage/add" element={<InternetUsage />} />
 
+         
+
+
           {/* Reports Routes */}
           <Route path="reports" element={<Reports />} />
           <Route path="reports/toners" element={<TonerReports />} />
+          <Route path="reports/gadgets" element={<GadgetReports />} />
+          <Route path="reports/internet" element={<InternetReports />} />
+          <Route path="reports/a4sheets" element={<A4SheetReports />} />
           <Route path="reports/consolidated" element={<ConsolidatedReport />} />
+           <Route path="reports/budget" element={<BudgetAnalysis />} />
 
           {/* A4 SHEETS */}
           <Route path="/a4-sheets" element={<A4Sheets />} />

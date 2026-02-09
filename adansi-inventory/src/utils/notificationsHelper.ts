@@ -1,3 +1,6 @@
+
+
+
 // src/utils/notificationHelper.ts
 
 import { createNotification, getNotifications } from "../services/notificationService";
@@ -204,6 +207,3 @@ export function triggerNotificationUpdate() {
   window.dispatchEvent(new CustomEvent("notification-added"));
   window.dispatchEvent(new Event('storage'));
 }
-
-
-

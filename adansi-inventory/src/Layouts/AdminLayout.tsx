@@ -7,6 +7,10 @@
 
 
 
+
+
+
+
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import NotificationsDropdown from "../components/NotificationsDropdown";
@@ -125,6 +129,12 @@ export default function AdminLayout() {
 
     "/internet-usage": "Internet Usage",
     "/a4-sheets": "A4 Sheets",
+    "/reports": "Reports & Analytics",
+    "/reports/toners": "Toner Reports",
+    "/reports/gadgets": "Gadget Reports",
+    "/reports/internet": "Internet Reports",
+    "/reports/a4sheets": "A4 Sheet Reports",
+    "/reports/consolidated": "Consolidated Report",
     "/settings": "Settings",
   };
 
@@ -135,6 +145,9 @@ export default function AdminLayout() {
       .pop()
       ?.replace("-", " ")
       ?.replace(/\b\w/g, c => c.toUpperCase());
+
+
+      
 
   return (
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -305,7 +318,6 @@ export default function AdminLayout() {
             <FileText size={18} />
             A4 Sheets
           </Link>
-
 
           {/* Reports */}
           <Link
