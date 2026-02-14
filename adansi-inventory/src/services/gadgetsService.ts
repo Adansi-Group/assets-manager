@@ -1,3 +1,4 @@
+
 // src/services/gadgetsService.ts
 
 import {
@@ -36,45 +37,76 @@ export async function getGadgets(): Promise<Gadget[]> {
 export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
   try {
     // Validate required fields
-    if (!gadget.model || !gadget.serialNumber) {
-      throw new Error("Model and Serial Number are required");
+    if (!gadget.model) {
+      throw new Error("Model/Name is required");
     }
 
     if (!gadget.model.trim()) {
-      throw new Error("Model cannot be empty");
+      throw new Error("Model/Name cannot be empty");
     }
 
-    if (!gadget.serialNumber.trim()) {
-      throw new Error("Serial Number cannot be empty");
+    // Validate device-specific requirements
+    if (gadget.deviceType === "Accessory") {
+      // For accessories, require accessory type and quantity
+      if (!gadget.accessoryType) {
+        throw new Error("Accessory Type is required");
+      }
+      if (gadget.quantity === undefined || gadget.quantity < 0) {
+        throw new Error("Quantity is required and must be 0 or greater");
+      }
+    } else {
+      // For Laptop/Smartphone, require serial number
+      if (!gadget.serialNumber || !gadget.serialNumber.trim()) {
+        throw new Error("Serial Number is required for Laptop/Smartphone");
+      }
     }
 
     // Clean the data - remove undefined values and trim strings
     const cleanGadget: any = {
       deviceType: gadget.deviceType,
       model: gadget.model.trim(),
-      serialNumber: gadget.serialNumber.trim(),
       year: gadget.year,
       status: gadget.status,
       createdAt: Timestamp.now(),
     };
 
-    // Only add optional fields if they have values
-    if (gadget.processor && gadget.processor.trim()) {
-      cleanGadget.processor = gadget.processor.trim();
+    // Add device-specific fields
+    if (gadget.deviceType === "Accessory") {
+      cleanGadget.accessoryType = gadget.accessoryType;
+      cleanGadget.quantity = gadget.quantity;
+      cleanGadget.condition = gadget.condition || "New";
+
+      if (gadget.compatibleWith && gadget.compatibleWith.trim()) {
+        cleanGadget.compatibleWith = gadget.compatibleWith.trim();
+      }
+      if (gadget.specifications && gadget.specifications.trim()) {
+        cleanGadget.specifications = gadget.specifications.trim();
+      }
+      if (gadget.purchaseDate) {
+        cleanGadget.purchaseDate = gadget.purchaseDate;
+      }
+      if (gadget.location && gadget.location.trim()) {
+        cleanGadget.location = gadget.location.trim();
+      }
+    } else {
+      // Laptop/Smartphone
+      cleanGadget.serialNumber = gadget.serialNumber!.trim();
+      
+      if (gadget.processor && gadget.processor.trim()) {
+        cleanGadget.processor = gadget.processor.trim();
+      }
+      if (gadget.storage && gadget.storage.trim()) {
+        cleanGadget.storage = gadget.storage.trim();
+      }
     }
-    
-    if (gadget.storage && gadget.storage.trim()) {
-      cleanGadget.storage = gadget.storage.trim();
-    }
-    
+
+    // Add common optional fields
     if (gadget.assignedTo && gadget.assignedTo.trim()) {
       cleanGadget.assignedTo = gadget.assignedTo.trim();
     }
-    
     if (gadget.assignedDate) {
       cleanGadget.assignedDate = gadget.assignedDate;
     }
-    
     if (gadget.notes && gadget.notes.trim()) {
       cleanGadget.notes = gadget.notes.trim();
     }
@@ -92,12 +124,25 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
 // UPDATE GADGET
 export async function updateGadget(gadget: Gadget): Promise<void> {
   try {
-    const { id, ...payload } = gadget;
-    await updateDoc(doc(db, COLLECTION, id), payload);
-    console.log("Gadget updated successfully");
-  } catch (error) {
-    console.error("Error updating gadget:", error);
-    throw error;
+    const { id, createdAt, ...payload } = gadget;
+    
+    // Clean the payload - remove undefined values
+    const cleanPayload: any = {};
+    
+    Object.keys(payload).forEach((key) => {
+      const value = (payload as any)[key];
+      if (value !== undefined && value !== null && value !== "") {
+        cleanPayload[key] = value;
+      }
+    });
+    
+    console.log("Updating gadget:", id, cleanPayload);
+    
+    await updateDoc(doc(db, COLLECTION, id), cleanPayload);
+    console.log("✅ Gadget updated successfully");
+  } catch (error: any) {
+    console.error("❌ Error updating gadget:", error);
+    throw new Error(`Failed to update gadget: ${error.message}`);
   }
 }
 
@@ -114,7 +159,7 @@ export async function deleteGadget(id: string): Promise<void> {
 
 // GET GADGETS BY TYPE
 export async function getGadgetsByType(
-  deviceType: "Laptop" | "Smartphone"
+  deviceType: "Laptop" | "Smartphone" | "Accessory"
 ): Promise<Gadget[]> {
   const gadgets = await getGadgets();
   return gadgets.filter((g) => g.deviceType === deviceType);
@@ -127,6 +172,26 @@ export async function getGadgetsByStatus(
   const gadgets = await getGadgets();
   return gadgets.filter((g) => g.status === status);
 }
+
+// GET ACCESSORIES BY TYPE
+export async function getAccessoriesByType(
+  accessoryType: string
+): Promise<Gadget[]> {
+  const gadgets = await getGadgets();
+  return gadgets.filter(
+    (g) => g.deviceType === "Accessory" && g.accessoryType === accessoryType
+  );
+}
+
+// GET LOW STOCK ACCESSORIES (quantity <= threshold)
+export async function getLowStockAccessories(threshold: number = 2): Promise<Gadget[]> {
+  const accessories = await getGadgetsByType("Accessory");
+  return accessories.filter(
+    (a) => a.quantity !== undefined && a.quantity <= threshold
+  );
+}
+
+
 
 
 
