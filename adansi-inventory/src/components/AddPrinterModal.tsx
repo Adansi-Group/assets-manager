@@ -1,3 +1,9 @@
+
+
+
+
+
+
 import { useState, useEffect } from "react";
 import { X, Plus } from "lucide-react";
 import type { Printer, PrinterColor } from "../types/printer";
@@ -21,6 +27,7 @@ type Props = {
 
 export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
   const [location, setLocation] = useState("");
+  const [room, setRoom] = useState(""); // NEW: Room/office field
   const [model, setModel] = useState("");
   const [printerColorType, setPrinterColorType] = useState<PrinterColor | "">("");
   const [quantity, setQuantity] = useState(1);
@@ -64,6 +71,7 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
   useEffect(() => {
     if (printer) {
       setLocation(printer.location);
+      setRoom(printer.room || ""); // NEW: Load room if exists
       setModel(printer.model);
       setPrinterColorType(printer.printerColorType);
       setQuantity(printer.quantity);
@@ -127,6 +135,7 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
 
     const printerData: Omit<Printer, "id"> & { id?: string } = {
       location,
+      room: room.trim() || undefined, // NEW: Only save if not empty
       model,
       printerColorType: printerColorType as PrinterColor,
       quantity,
@@ -223,6 +232,20 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* Room/Office - NEW FIELD */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Room/Office <span className="text-gray-400 text-xs">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                value={room}
+                onChange={(e) => setRoom(e.target.value)}
+                placeholder="e.g., CEO's Office, Reception, First Floor"
+                className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-green-500 focus:outline-none"
+              />
             </div>
 
             {/* Model */}
@@ -479,7 +502,5 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
     </div>
   );
 }
-
-
 
 

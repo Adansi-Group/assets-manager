@@ -1,3 +1,8 @@
+
+
+
+
+
 // Service to manage custom printer options in Firebase
 import {
   collection,
@@ -120,39 +125,38 @@ export async function cleanupUnusedOptions(): Promise<void> {
     const customOptions = await getCustomOptionsFromDB();
 
     // Extract used values from all printers
-    const usedLocations = new Set(
-      printers
-        .map(p => p.location)
-        .filter(loc => !DEFAULT_LOCATIONS.includes(loc))
-    );
+    const usedLocations = printers
+      .map(p => p.location)
+      .filter(loc => !DEFAULT_LOCATIONS.includes(loc));
 
-    const usedModels = new Set(
-      printers
-        .map(p => p.model)
-        .filter(model => !DEFAULT_MODELS.includes(model))
-    );
+    const usedModels = printers
+      .map(p => p.model)
+      .filter(model => !DEFAULT_MODELS.includes(model));
 
-    const usedColors = new Set(
-      printers
-        .map(p => p.printerColorType)
-        .filter(color => !DEFAULT_COLORS.some(dc => dc.value === color))
-    );
+    const usedColors = printers
+      .map(p => p.printerColorType)
+      .filter(col => !DEFAULT_COLORS.some(dc => dc.value === col));
 
-    const usedAccessories = new Set<string>();
+    const usedAccessories: string[] = [];
     printers.forEach(p => {
       p.accessories?.forEach(acc => {
-        if (!DEFAULT_ACCESSORIES.includes(acc)) {
-          usedAccessories.add(acc);
+        if (!DEFAULT_ACCESSORIES.includes(acc) && !usedAccessories.includes(acc)) {
+          usedAccessories.push(acc);
         }
       });
     });
 
     // Filter custom options to only keep those still in use
+    const filteredLocations = customOptions.locations.filter(loc => usedLocations.includes(loc));
+    const filteredModels = customOptions.models.filter(model => usedModels.includes(model));
+    const filteredColors = customOptions.colors.filter(col => usedColors.includes(col));
+    const filteredAccessories = customOptions.accessories.filter(acc => usedAccessories.includes(acc));
+    
     const cleanedOptions: CustomOptions = {
-      locations: customOptions.locations.filter(loc => usedLocations.has(loc)),
-      models: customOptions.models.filter(model => usedModels.has(model)),
-      colors: customOptions.colors.filter((color: string) => usedColors.has(color)),
-      accessories: customOptions.accessories.filter(acc => usedAccessories.has(acc)),
+      locations: filteredLocations,
+      models: filteredModels,
+      colors: filteredColors,
+      accessories: filteredAccessories,
     };
 
     // Save cleaned options back to Firebase

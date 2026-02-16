@@ -201,6 +201,7 @@ export default function Printers() {
   const filtered = printers.filter(
     (p) =>
       p.location.toLowerCase().includes(search.toLowerCase()) ||
+      (p.room && p.room.toLowerCase().includes(search.toLowerCase())) ||
       p.model.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -271,7 +272,14 @@ export default function Printers() {
 
             {paginated.map((p) => (
               <tr key={p.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700 dark:border-gray-700">
-                <td className="p-4">{p.location}</td>
+                <td className="p-4">
+                  {p.location}
+                  {p.room && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {p.room}
+                    </div>
+                  )}
+                </td>
                 <td className="p-4">{p.model}</td>
                 <td className="p-4">{p.printerColorType}</td>
                 <td className="p-4">{p.quantity}</td>
@@ -473,21 +481,3 @@ function TonerLevelBadge({ toner }: { toner: TonerLevel }) {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
