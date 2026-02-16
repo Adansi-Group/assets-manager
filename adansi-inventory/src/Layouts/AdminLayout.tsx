@@ -1,16 +1,5 @@
 
 
-
-
-
-
-
-
-
-
-
-
-
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import NotificationsDropdown from "../components/NotificationsDropdown";
@@ -125,6 +114,7 @@ export default function AdminLayout() {
     "/gadgets": "Gadgets",
     "/gadgets/phones": "Smartphones",
     "/gadgets/laptops": "Laptops",
+    "/gadgets/accessories": "Accessories",
     "/profile": "My Profile",
 
     "/internet-usage": "Internet Usage",
@@ -277,6 +267,7 @@ export default function AdminLayout() {
                 >
                   Smartphones
                 </Link>
+                
 
                 <Link
                   to="/gadgets/laptops"
@@ -289,6 +280,19 @@ export default function AdminLayout() {
                   <Laptop size={14} />
                   Laptops
                 </Link>
+
+                <Link
+                  to="/gadgets/accessories"
+                  className={`block px-3 py-2 rounded text-sm ${
+                    isActive("/gadgets/accessories")
+                      ? "bg-green-600 dark:bg-gray-700"
+                      : "hover:bg-green-800 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  Accessories
+                </Link>
+
+                
               </div>
             )}
           </div>

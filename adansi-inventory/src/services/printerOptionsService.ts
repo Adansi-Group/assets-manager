@@ -3,6 +3,9 @@
 
 
 
+
+
+
 // Service to manage custom printer options in Firebase
 import {
   collection,
@@ -23,12 +26,12 @@ const PRINTERS_COLLECTION = "printers";
 // Default options
 export const DEFAULT_LOCATIONS = [
   'Travel House',
-  'Botwe',
-  'Nester',
-  'Tema',
-  'Takoradi',
-  'Kumasi',
-  'Tarkwa',
+  'Ashaley Botwe Branch',
+  'Nester Square Branch',
+  'Tema Branch',
+  'Takoradi Branch',
+  'Kumasi Branch',
+  'Tarkwa Branch',
 ];
 
 export const DEFAULT_MODELS = [

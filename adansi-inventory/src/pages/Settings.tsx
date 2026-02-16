@@ -18,6 +18,7 @@ import {
 } from "../services/notificationService";
 import { Bell, Mail, MessageSquare, Trash2, User, Save, X, Plus } from "lucide-react";
 import Swal from "sweetalert2";
+import { migrateLocationNames } from '../services/locationMigration';
 import { Droplets, Smartphone, Wifi, FileText, AlertCircle, CheckCircle } from "lucide-react";
 
 export default function Settings() {
@@ -721,6 +722,46 @@ export default function Settings() {
                 Clean Up
               </button>
             </div>
+
+            <button
+  onClick={async () => {
+    const confirm = await Swal.fire({
+      title: 'Migrate Location Names?',
+      text: 'This will update: Tema → Tema Branch, Botwe → Ashaley Botwe Branch, etc.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, migrate!',
+      confirmButtonColor: '#16a34a',
+    });
+
+    if (confirm.isConfirmed) {
+      Swal.fire({
+        title: 'Migrating...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const result = await migrateLocationNames();
+      
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Done!',
+          html: `✅ ${result.tonersUpdated} toners updated<br>✅ ${result.printersUpdated} printers updated`,
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.error,
+        });
+      }
+    }
+  }}
+  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
+>
+  🔄 Migrate Location Names to Branch
+</button>
 
           </div>
         </div>

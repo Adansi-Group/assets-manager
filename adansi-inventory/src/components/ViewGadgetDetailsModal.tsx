@@ -1,5 +1,13 @@
 
 
+
+
+
+
+
+
+
+
 // src/components/ViewGadgetDetailsModal.tsx - WITH GENDER FIELD
 
 import { X } from "lucide-react";

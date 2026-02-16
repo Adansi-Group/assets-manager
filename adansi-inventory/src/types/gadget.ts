@@ -1,9 +1,3 @@
-
-
-
-
-
-
 // src/types/gadget.ts
 
 export type DeviceType = "Laptop" | "Smartphone" | "Accessory";
@@ -45,3 +39,6 @@ export type Gadget = {
   purchaseDate?: string;
   location?: string;
 };
+
+
+

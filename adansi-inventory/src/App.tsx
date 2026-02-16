@@ -22,6 +22,7 @@ import GadgetReports from "./pages/Gadgetreports";
 import InternetReports from "./pages/Internetreports";
 import A4SheetReports from "./pages/A4sheetreports";
 import BudgetAnalysis from "./pages/Budgetanalysis";
+import Accessories from "./pages/gadgets/Accessories";
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -80,8 +81,9 @@ export default function App() {
           <Route path="/internet-usage" element={<InternetUsage />} />
           <Route path="/internet-usage/add" element={<InternetUsage />} />
 
-         
-
+          // Inside your Routes:
+<Route path="/gadgets/accessories" element={<Accessories />} />
+<Route path="/gadgets/accessories/add" element={<Accessories />} />
 
           {/* Reports Routes */}
           <Route path="reports" element={<Reports />} />

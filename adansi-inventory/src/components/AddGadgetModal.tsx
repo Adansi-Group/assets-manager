@@ -1,6 +1,10 @@
 
 
 
+
+
+
+
 // src/components/AddGadgetModal.tsx - WITH GENDER FIELD
 
 import { useState, useEffect } from "react";
@@ -480,9 +484,3 @@ export default function AddGadgetModal({
     </>
   );
 }
-
-
-
-
-
-

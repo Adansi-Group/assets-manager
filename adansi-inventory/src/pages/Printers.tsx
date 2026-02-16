@@ -1,12 +1,3 @@
-
-
-
-
-
-
-
-
-
 import { useEffect, useState } from "react";
 import Swal from "sweetalert2";
 import AddPrinterModal from "../components/AddPrinterModal";
@@ -272,18 +263,20 @@ export default function Printers() {
 
             {paginated.map((p) => (
               <tr key={p.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700 dark:border-gray-700">
-                <td className="p-4">
-                  {p.location}
-                  {p.room && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {p.room}
-                    </div>
-                  )}
+                <td className="p-4 align-middle whitespace-nowrap">
+                  <div className="flex flex-col">
+                    <span>{p.location}</span>
+                    {p.room && (
+                      <span className="text-xs text-blue-600 dark:text-blue-400">
+                        📍 {p.room}
+                      </span>
+                    )}
+                  </div>
                 </td>
-                <td className="p-4">{p.model}</td>
-                <td className="p-4">{p.printerColorType}</td>
-                <td className="p-4">{p.quantity}</td>
-                <td className="p-4">
+                <td className="p-4 align-middle whitespace-nowrap">{p.model}</td>
+                <td className="p-4 align-middle whitespace-nowrap">{p.printerColorType}</td>
+                <td className="p-4 align-middle whitespace-nowrap">{p.quantity}</td>
+                <td className="p-4 align-middle" style={{ minWidth: '200px' }}>
                   <TonerLevelsDisplay 
                     printer={p} 
                     onCheck={() => setSelectedPrinterForCheck(p)}
@@ -293,23 +286,25 @@ export default function Printers() {
                     }}
                   />
                 </td>
-                <td className="p-4">
+                <td className="p-4 align-middle whitespace-nowrap">
                   <StatusBadge status={p.status} />
                 </td>
-                <td className="p-4">{p.date}</td>
-                <td className="p-4 space-x-3">
-                  <button
-                    onClick={() => setEditing(p)}
-                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleRemove(p.id)}
-                    className="text-red-600 hover:text-red-800 dark:text-red-400"
-                  >
-                    Delete
-                  </button>
+                <td className="p-4 align-middle whitespace-nowrap">{p.date}</td>
+                <td className="p-4 align-middle whitespace-nowrap">
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setEditing(p)}
+                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleRemove(p.id)}
+                      className="text-red-600 hover:text-red-800 dark:text-red-400"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -429,7 +424,7 @@ function TonerLevelsDisplay({ printer, onCheck, onReplaceColor }: {
             className="cursor-pointer hover:opacity-80 transition-opacity group relative"
             title={`Click to replace ${toner.color} toner`}
           >
-            <TonerLevelBadge toner={toner} />
+            <TonerLevelBadge toner={toner} printerModel={printer.model} />
             <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
               Replace {toner.color}
             </span>
@@ -453,8 +448,13 @@ function TonerLevelsDisplay({ printer, onCheck, onReplaceColor }: {
   );
 }
 
-function TonerLevelBadge({ toner }: { toner: TonerLevel }) {
+function TonerLevelBadge({ toner, printerModel }: { toner: TonerLevel; printerModel: string }) {
   const getColorClass = () => {
+    // For PIXMA printers, Yellow represents "Color" - show gradient
+    if (printerModel.toLowerCase().includes('pixma') && toner.color === "Yellow") {
+      return "bg-gradient-to-r from-cyan-500 via-pink-500 to-yellow-400 text-white";
+    }
+    
     switch (toner.color) {
       case "Black": return "bg-gray-800 text-white";
       case "Cyan": return "bg-cyan-500 text-white";
@@ -469,11 +469,19 @@ function TonerLevelBadge({ toner }: { toner: TonerLevel }) {
     if (toner.currentPercentage < 50) return "text-yellow-600 dark:text-yellow-400";
     return "text-green-600 dark:text-green-400";
   };
+  
+  // Get display text for color
+  const getColorDisplay = () => {
+    if (printerModel.toLowerCase().includes('pixma') && toner.color === "Yellow") {
+      return "C"; // Show "C" for Color
+    }
+    return toner.color.charAt(0);
+  };
 
   return (
     <div className="flex flex-col gap-1">
       <span className={`px-2 py-1 rounded text-xs font-medium ${getColorClass()}`}>
-        {toner.color.charAt(0)}
+        {getColorDisplay()}
       </span>
       <span className={`text-xs font-semibold ${getLevelColor()}`}>
         {toner.currentPercentage}%
@@ -481,3 +489,4 @@ function TonerLevelBadge({ toner }: { toner: TonerLevel }) {
     </div>
   );
 }
+

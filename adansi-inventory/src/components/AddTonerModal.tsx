@@ -4,6 +4,7 @@
 
 
 
+
 import { useState, useEffect } from "react";
 import { X, Plus } from "lucide-react";
 import Swal from "sweetalert2";
@@ -215,12 +216,12 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
                 >
                   <option value="">Select location</option>
                   <option>Travel House</option>
-                  <option>Botwe</option>
-                  <option>Nester</option>
-                  <option>Tema</option>
-                  <option>Takoradi</option>
-                  <option>Kumasi</option>
-                  <option>Tarkwa</option>
+                  <option>Ashaley Botwe Branch</option>
+                  <option>Nester Square Branch</option>
+                  <option>Tema Branch</option>
+                  <option>Takoradi Branch</option>
+                  <option>Kumasi Branch</option>
+                  <option>Tarkwa Branch</option>
                 </select>
               </div>
 

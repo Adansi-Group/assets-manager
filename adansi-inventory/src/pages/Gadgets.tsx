@@ -6,10 +6,7 @@
 
 
 
-
-
-
-// src/pages/Gadgets.tsx - WITH VIEW DETAILS BUTTON
+// src/pages/Gadgets.tsx - CORRECT VERSION WITH GENDER
 
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -24,7 +21,7 @@ import {
   deleteGadget,
 } from "../services/gadgetsService";
 import Swal from "sweetalert2";
-import { Download, Smartphone, Laptop, Upload, Package, Eye } from "lucide-react";
+import { Download, Smartphone, Laptop, Upload, Package } from "lucide-react";
 
 export default function Gadgets() {
   const [gadgets, setGadgets] = useState<Gadget[]>([]);
@@ -154,6 +151,7 @@ export default function Gadgets() {
     if (newStatus) {
       let assignedTo = gadget.assignedTo;
       let assignedDate = gadget.assignedDate;
+      let gender = gadget.gender;
 
       if (newStatus === "In-Use") {
         const { value: employee } = await Swal.fire({
@@ -167,10 +165,25 @@ export default function Gadgets() {
         if (employee) {
           assignedTo = employee;
           assignedDate = new Date().toISOString().split("T")[0];
+          
+          const { value: selectedGender } = await Swal.fire({
+            title: "Select Gender",
+            input: "select",
+            inputOptions: {
+              "": "Not specified",
+              "Male": "Male",
+              "Female": "Female",
+            },
+            inputValue: gadget.gender || "",
+            showCancelButton: true,
+          });
+          
+          gender = selectedGender || undefined;
         }
       } else {
         assignedTo = undefined;
         assignedDate = undefined;
+        gender = undefined;
       }
 
       const updatedGadget: Gadget = {
@@ -178,6 +191,7 @@ export default function Gadgets() {
         status: newStatus as GadgetStatus,
         assignedTo,
         assignedDate,
+        gender,
       };
 
       await updateGadget(updatedGadget);
@@ -228,6 +242,7 @@ export default function Gadgets() {
         "Year",
         "Status",
         "Assigned To",
+        "Gender",
         "Assigned Date",
         "Accessory Type",
         "Quantity",
@@ -245,6 +260,7 @@ export default function Gadgets() {
         g.year,
         g.status,
         g.assignedTo || "",
+        g.gender || "",
         g.assignedDate || "",
         g.accessoryType || "",
         g.quantity || "",
@@ -296,7 +312,6 @@ export default function Gadgets() {
 
   return (
     <div className="p-6 space-y-6 bg-gray-100 dark:bg-gray-900">
-      {/* DASHBOARD CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
         <Stat title="Total Gadgets" value={totalGadgets} />
         <Stat title="Laptops" value={laptops} icon={<Laptop size={20} />} color="text-purple-600" />
@@ -307,7 +322,6 @@ export default function Gadgets() {
         <Stat title="Faulty" value={faulty} color="text-red-600" />
       </div>
 
-      {/* ACTION BAR */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex gap-4 w-full md:w-auto">
           <input
@@ -355,7 +369,6 @@ export default function Gadgets() {
         </div>
       </div>
 
-      {/* TABLE */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-100 dark:bg-gray-700">
@@ -380,12 +393,10 @@ export default function Gadgets() {
           <tbody>
             {filtered.map((g) => (
               <tr key={g.id} className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-                {/* Device Type */}
                 <td className="px-4 py-3 whitespace-nowrap">
                   <DeviceTypeBadge type={g.deviceType} />
                 </td>
 
-                {/* Model/Name */}
                 <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
                   <div>
                     {g.model}
@@ -397,7 +408,6 @@ export default function Gadgets() {
                   </div>
                 </td>
 
-                {/* Serial Number OR Quantity */}
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {g.deviceType === "Accessory" ? (
                     <span className="inline-flex items-center gap-1">
@@ -411,7 +421,6 @@ export default function Gadgets() {
                   )}
                 </td>
 
-                {/* Specs (Processor/Storage OR Specifications) */}
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
                   {g.deviceType === "Accessory" ? (
                     <div className="text-xs">
@@ -431,12 +440,10 @@ export default function Gadgets() {
                   )}
                 </td>
 
-                {/* Year */}
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {g.year}
                 </td>
 
-                {/* Status */}
                 <td className="px-4 py-3 whitespace-nowrap">
                   <button onClick={() => handleStatusChange(g)}>
                     <StatusBadge status={g.status} />
@@ -448,22 +455,20 @@ export default function Gadgets() {
                   )}
                 </td>
 
-                {/* Assigned To */}
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {g.assignedTo || "—"}
                   {g.assignedDate && (
                     <div className="text-xs text-gray-500 dark:text-gray-400">
                       {g.assignedDate}
+                      {g.gender && ` • ${g.gender}`}
                     </div>
                   )}
                 </td>
 
-                {/* Location */}
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {g.location || "—"}
                 </td>
 
-                {/* Actions */}
                 <td className="px-4 py-3 space-x-3 whitespace-nowrap">
                   <button
                     onClick={() => setViewing(g)}
@@ -504,7 +509,6 @@ export default function Gadgets() {
         </table>
       </div>
 
-      {/* ADD/EDIT MODAL */}
       {isAddOpen && (
         <AddGadgetModal
           existing={editing || undefined}
@@ -516,7 +520,6 @@ export default function Gadgets() {
         />
       )}
 
-      {/* VIEW DETAILS MODAL */}
       {viewing && (
         <ViewGadgetDetailsModal
           gadget={viewing}
@@ -529,7 +532,6 @@ export default function Gadgets() {
         />
       )}
 
-      {/* IMPORT MODAL */}
       {showImportModal && (
         <GadgetsExcelImportModal
           onClose={() => setShowImportModal(false)}
@@ -539,8 +541,6 @@ export default function Gadgets() {
     </div>
   );
 }
-
-/* COMPONENTS */
 
 function Stat({ title, value, color = "", icon }: any) {
   return (

@@ -1,5 +1,4 @@
-
-// src/services/gadgetsService.ts
+// src/services/gadgetsService.ts - FIXED VERSION
 
 import {
   collection,
@@ -11,6 +10,7 @@ import {
   query,
   orderBy,
   Timestamp,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import type { Gadget } from "../types/gadget";
@@ -107,6 +107,9 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
     if (gadget.assignedDate) {
       cleanGadget.assignedDate = gadget.assignedDate;
     }
+    if (gadget.gender && gadget.gender.trim()) {
+      cleanGadget.gender = gadget.gender.trim();
+    }
     if (gadget.notes && gadget.notes.trim()) {
       cleanGadget.notes = gadget.notes.trim();
     }
@@ -121,24 +124,30 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
   }
 }
 
-// UPDATE GADGET
+// UPDATE GADGET - FIXED TO PROPERLY DELETE FIELDS
 export async function updateGadget(gadget: Gadget): Promise<void> {
   try {
     const { id, createdAt, ...payload } = gadget;
     
-    // Clean the payload - remove undefined values
-    const cleanPayload: any = {};
+    // Build the update payload
+    const updatePayload: any = {};
     
     Object.keys(payload).forEach((key) => {
       const value = (payload as any)[key];
-      if (value !== undefined && value !== null && value !== "") {
-        cleanPayload[key] = value;
+      
+      // If value is explicitly undefined, use deleteField() to remove it from Firestore
+      if (value === undefined) {
+        updatePayload[key] = deleteField();
+      } 
+      // Only include non-empty values
+      else if (value !== null && value !== "") {
+        updatePayload[key] = value;
       }
     });
     
-    console.log("Updating gadget:", id, cleanPayload);
+    console.log("Updating gadget:", id, updatePayload);
     
-    await updateDoc(doc(db, COLLECTION, id), cleanPayload);
+    await updateDoc(doc(db, COLLECTION, id), updatePayload);
     console.log("✅ Gadget updated successfully");
   } catch (error: any) {
     console.error("❌ Error updating gadget:", error);
@@ -190,9 +199,3 @@ export async function getLowStockAccessories(threshold: number = 2): Promise<Gad
     (a) => a.quantity !== undefined && a.quantity <= threshold
   );
 }
-
-
-
-
-
-

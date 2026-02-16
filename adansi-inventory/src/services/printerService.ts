@@ -1,4 +1,9 @@
 
+
+
+
+
+
 import {
   collection,
   getDocs,
@@ -40,7 +45,12 @@ export async function addPrinter(
   printer: Omit<Printer, "id">
 ): Promise<void> {
   try {
-    await addDoc(collection(db, COLLECTION), printer);
+    // Remove undefined fields before saving to Firebase
+    const cleanPrinter = Object.fromEntries(
+      Object.entries(printer).filter(([_, value]) => value !== undefined)
+    );
+    
+    await addDoc(collection(db, COLLECTION), cleanPrinter);
     console.log("Printer added successfully");
   } catch (error) {
     console.error("Error adding printer:", error);
@@ -52,7 +62,13 @@ export async function addPrinter(
 export async function updatePrinter(printer: Printer): Promise<void> {
   try {
     const { id, ...payload } = printer;
-    await updateDoc(doc(db, COLLECTION, id), payload);
+    
+    // Remove undefined fields before updating Firebase
+    const cleanPayload = Object.fromEntries(
+      Object.entries(payload).filter(([_, value]) => value !== undefined)
+    );
+    
+    await updateDoc(doc(db, COLLECTION, id), cleanPayload);
     console.log("Printer updated successfully");
   } catch (error) {
     console.error("Error updating printer:", error);
@@ -73,9 +89,3 @@ export async function deletePrinter(id: string): Promise<void> {
     throw error;
   }
 }
-
-
-
-
-
-

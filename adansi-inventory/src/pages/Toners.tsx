@@ -7,7 +7,6 @@
 
 
 
-
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import AddTonerModal from "../components/AddTonerModal";
@@ -19,7 +18,7 @@ import {
   deleteToner,
 } from "../services/tonerService";
 import Swal from "sweetalert2";
-import { Download, ChevronDown, Trash2 } from "lucide-react";
+import { Download, ChevronDown } from "lucide-react";
 
 // Standard CMYK colors for most printers
 const STANDARD_COLORS = ["Black", "Cyan", "Magenta", "Yellow"] as const;
@@ -36,6 +35,15 @@ function getAvailableColors(printerType: string): readonly string[] {
   
   // Default to standard CMYK colors
   return STANDARD_COLORS;
+}
+
+// ✅ ADD THIS: Function to calculate status
+function calculateStatus(currentQty: number, initialQty: number): "Good" | "Warning" | "Critical" {
+  if (initialQty === 0) return "Good";
+  const percentage = (currentQty / initialQty) * 100;
+  if (percentage <= 20) return "Critical";
+  else if (percentage <= 50) return "Warning";
+  else return "Good";
 }
 
 // Grouped toner with selected color
@@ -80,57 +88,6 @@ export default function Toners() {
   useEffect(() => {
     loadToners();
   }, []);
-
-  // CLEAR ALL TONERS FROM FIREBASE
-  async function handleClearAllToners() {
-    const result = await Swal.fire({
-      title: "⚠️ Delete ALL Toners?",
-      html: `
-        <div class="text-left space-y-3">
-          <p class="text-red-600 font-bold">This will permanently delete ALL toner records from Firebase!</p>
-          <p class="text-gray-600">Current total: <strong>${toners.length}</strong> records</p>
-          <p class="text-gray-600">Total quantity: <strong>${toners.reduce((sum, t) => sum + t.quantity, 0)}</strong></p>
-          <p class="text-sm text-gray-500">You will need to re-add all toners manually after this.</p>
-          <p class="text-sm font-semibold text-red-600 mt-4">This action CANNOT be undone!</p>
-        </div>
-      `,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#dc2626",
-      cancelButtonColor: "#6b7280",
-      confirmButtonText: "Yes, delete everything!",
-      cancelButtonText: "Cancel",
-    });
-
-    if (result.isConfirmed) {
-      try {
-        console.log("🗑️ Deleting all toners...");
-        
-        // Delete each toner record
-        for (const toner of toners) {
-          await deleteToner(toner.id);
-          console.log(`   Deleted: ${toner.location} - ${toner.printerType} - ${toner.colorType}`);
-        }
-
-        await loadToners();
-
-        Swal.fire({
-          icon: "success",
-          title: "All Toners Deleted!",
-          text: `${toners.length} records have been removed from Firebase.`,
-          timer: 2000,
-          showConfirmButton: false,
-        });
-      } catch (error) {
-        console.error("Error clearing toners:", error);
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: "Failed to clear all toners. Please try again.",
-        });
-      }
-    }
-  }
 
   // Group toners by location + printer + toner type
   function groupToners(tonerList: Toner[]): GroupedToner[] {
@@ -296,13 +253,16 @@ export default function Toners() {
 
     if (result.isConfirmed && result.value !== undefined) {
       if (existingRecord) {
-        const updatedToner = {
+        // ✅ ADD STATUS CALCULATION HERE
+        const updatedToner: Toner = {
           ...existingRecord,
           quantity: result.value,
+          status: calculateStatus(result.value, existingRecord.initialQuantity || result.value), // ✅ FIXED: Use current value if initialQuantity is missing
           lastCheckedDate: new Date().toISOString().split("T")[0],
         };
         await updateToner(updatedToner);
       } else {
+        // ✅ ADD STATUS HERE
         const newToner: Omit<Toner, "id"> = {
           location: group.location,
           room: group.room,
@@ -312,6 +272,7 @@ export default function Toners() {
           quantity: result.value,
           dateBrought: new Date().toISOString().split("T")[0],
           initialQuantity: result.value,
+          status: "Good", // ✅ ADDED
           lastCheckedDate: new Date().toISOString().split("T")[0],
         };
         await addToner(newToner);
@@ -442,8 +403,6 @@ export default function Toners() {
         />
 
         <div className="flex gap-3 flex-wrap">
-         
-
           <button
             onClick={exportCSV}
             className="flex items-center gap-2 border border-gray-300 dark:border-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-white"
@@ -671,9 +630,5 @@ function RecommendationBadge({ percentage }: { percentage: number }) {
     </div>
   );
 }
-
-
-
-
 
 
