@@ -23,6 +23,7 @@ import InternetReports from "./pages/Internetreports";
 import A4SheetReports from "./pages/A4sheetreports";
 import BudgetAnalysis from "./pages/Budgetanalysis";
 import Accessories from "./pages/gadgets/Accessories";
+import SupportTickets from "./pages/SupportTicket";
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -93,6 +94,8 @@ export default function App() {
           <Route path="reports/a4sheets" element={<A4SheetReports />} />
           <Route path="reports/consolidated" element={<ConsolidatedReport />} />
            <Route path="reports/budget" element={<BudgetAnalysis />} />
+
+           <Route path="support-tickets" element={<SupportTickets />} />
 
           {/* A4 SHEETS */}
           <Route path="/a4-sheets" element={<A4Sheets />} />

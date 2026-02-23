@@ -22,6 +22,8 @@ import {
   FileText,
   Settings as SettingsIcon,
   BarChart3,
+  Headphones,
+  MonitorSmartphone
 } from "lucide-react";
 
 export default function AdminLayout() {
@@ -143,7 +145,7 @@ export default function AdminLayout() {
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
       {/* SIDEBAR */}
       <aside className="w-64 bg-gradient-to-b from-green-700 to-green-900 dark:from-gray-800 dark:to-gray-900 text-white flex flex-col">
-        <div className="px-6 py-5 text-xl font-bold">Admin Panel</div>
+        <div className="px-6 py-5 text-xl font-bold">Assets Station</div>
 
         <nav className="px-4 space-y-2 flex-1">
           {/* Dashboard */}
@@ -233,7 +235,7 @@ export default function AdminLayout() {
               }`}
             >
               <div className="flex items-center gap-3">
-                <Smartphone size={18} />
+                <MonitorSmartphone size={18} />
                 Gadgets
               </div>
               <ChevronDown
@@ -322,6 +324,20 @@ export default function AdminLayout() {
             <FileText size={18} />
             A4 Sheets
           </Link>
+
+           {/* Support Ticket */}
+          <Link
+            to="/support-tickets"
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg ${
+              isActive("/support-ticket")
+                ? "bg-green-600 dark:bg-gray-700"
+                : "hover:bg-green-800 dark:hover:bg-gray-700"
+            }`}
+          >
+            <Headphones size={18} />
+            Support
+          </Link>
+         
 
           {/* Reports */}
           <Link
