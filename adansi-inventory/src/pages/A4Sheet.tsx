@@ -184,7 +184,7 @@ export default function A4Sheets() {
         "Current Quantity",
         "Initial Quantity",
         "Min Stock Level",
-        "Cost Per Ream",
+        "Cost Per Box",
         "Total Value",
         "Supplier",
         "Status",
@@ -253,7 +253,7 @@ export default function A4Sheets() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card
           title="Total Stock"
-          value={`${stats.totalReams} reams`}
+          value={`${stats.totalReams} boxes`}
           icon={<Package />}
         />
         <Card
@@ -319,7 +319,7 @@ export default function A4Sheets() {
                 "Status",
                 "Usage Rate",
                 "Days Left",
-                "Cost/Ream",
+                "Cost/Box",
                 "Total Value",
                 "Supplier",
                 "Actions",
@@ -348,7 +348,7 @@ export default function A4Sheets() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-gray-900 dark:text-white">
-                      {s.currentQuantity} reams
+                      {s.currentQuantity} boxes
                     </span>
                     <button
                       onClick={() => handleQuickUpdate(s)}
@@ -368,7 +368,7 @@ export default function A4Sheets() {
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
                   {s.averageMonthlyUsage ? (
                     <span className="text-xs">
-                      {s.averageMonthlyUsage} reams/mo
+                      {s.averageMonthlyUsage} box/mo
                     </span>
                   ) : (
                     <span className="text-gray-400 text-xs">No data</span>

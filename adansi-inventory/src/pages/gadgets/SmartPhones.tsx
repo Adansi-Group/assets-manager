@@ -1,17 +1,11 @@
 
-
-
-
-
-
-
-
-// src/pages/gadgets/Smartphones.tsx
+// src/pages/gadgets/Smartphones.tsx - WITH BEAUTIFUL DETAILS MODAL
 
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import AddGadgetModal from "../../components/AddGadgetModal";
-import GadgetsExcelImportModal from "../../components/ExcelImportModal";
+import ExportDropdown from "../../components/ExportDropdown";
+import Pagination from "../../components/Pagination";
 import type { Gadget, GadgetStatus } from "../../types/gadget";
 import {
   getGadgetsByType,
@@ -20,7 +14,7 @@ import {
   deleteGadget,
 } from "../../services/gadgetsService";
 import Swal from "sweetalert2";
-import { Download, Smartphone as PhoneIcon, Upload } from "lucide-react";
+import { Smartphone as PhoneIcon, Search, Edit, Trash2, Eye } from "lucide-react";
 
 export default function Smartphones() {
   const [phones, setPhones] = useState<Gadget[]>([]);
@@ -28,7 +22,10 @@ export default function Smartphones() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<GadgetStatus | "All">("All");
-  const [showImportModal, setShowImportModal] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -45,6 +42,11 @@ export default function Smartphones() {
   useEffect(() => {
     loadPhones();
   }, []);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
 
   async function handleSave(gadget: Gadget | Omit<Gadget, "id">) {
     try {
@@ -69,134 +71,6 @@ export default function Smartphones() {
         icon: "error",
         title: "Error",
         text: "Failed to save phone",
-      });
-    }
-  }
-
-  async function handleImport(importedGadgets: Omit<Gadget, "id">[]) {
-    try {
-      // Filter only smartphones
-      const phonesOnly = importedGadgets.filter(g => g.deviceType === "Smartphone");
-      
-      if (phonesOnly.length === 0) {
-        Swal.fire({
-          icon: "warning",
-          title: "No Smartphones Found",
-          text: "The Excel file contains no smartphone entries.",
-        });
-        return;
-      }
-
-      console.log("Starting import of", phonesOnly.length, "smartphones");
-      
-      let successCount = 0;
-      let failCount = 0;
-      const errors: string[] = [];
-
-      for (const phone of phonesOnly) {
-        try {
-          console.log("Importing smartphone:", phone);
-          await addGadget(phone);
-          successCount++;
-        } catch (err: any) {
-          failCount++;
-          console.error("Failed to import smartphone:", phone, err);
-          errors.push(`${phone.model}: ${err.message}`);
-        }
-      }
-
-      await loadPhones();
-      setShowImportModal(false);
-
-      const skipped = importedGadgets.length - phonesOnly.length;
-
-      if (failCount > 0) {
-        Swal.fire({
-          icon: "warning",
-          title: "Partial Import",
-          html: `
-            <p>${successCount} smartphone(s) imported successfully.</p>
-            <p class="text-red-600">${failCount} failed to import.</p>
-            ${skipped > 0 ? `<p class="text-yellow-600">${skipped} non-smartphone item(s) were skipped.</p>` : ""}
-            <details class="mt-2 text-left text-sm">
-              <summary>Show errors</summary>
-              <ul class="mt-2 list-disc list-inside">
-                ${errors.map(e => `<li>${e}</li>`).join("")}
-              </ul>
-            </details>
-          `,
-        });
-      } else {
-        Swal.fire({
-          title: "Import Successful!",
-          html: `${successCount} smartphone(s) imported successfully.${skipped > 0 ? `<br><small>${skipped} non-smartphone item(s) were skipped.</small>` : ""}`,
-          icon: "success",
-          timer: 2000,
-          showConfirmButton: false,
-        });
-      }
-    } catch (error: any) {
-      console.error("Import error:", error);
-      Swal.fire({
-        title: "Import Failed",
-        text: error.message || "An error occurred while importing smartphones.",
-        icon: "error",
-      });
-    }
-  }
-
-  async function handleStatusChange(phone: Gadget) {
-    const { value: newStatus } = await Swal.fire({
-      title: "Change Status",
-      input: "select",
-      inputOptions: {
-        "In-Stock": "In-Stock",
-        "In-Use": "In-Use",
-        Faulty: "Faulty",
-      },
-      inputValue: phone.status,
-      showCancelButton: true,
-      confirmButtonColor: "#16a34a",
-      confirmButtonText: "Update",
-    });
-
-    if (newStatus) {
-      let assignedTo = phone.assignedTo;
-      let assignedDate = phone.assignedDate;
-
-      if (newStatus === "In-Use") {
-        const { value: employee } = await Swal.fire({
-          title: "Assign To",
-          input: "text",
-          inputPlaceholder: "Employee name",
-          inputValue: phone.assignedTo || "",
-          showCancelButton: true,
-        });
-
-        if (employee) {
-          assignedTo = employee;
-          assignedDate = new Date().toISOString().split("T")[0];
-        }
-      } else {
-        assignedTo = undefined;
-        assignedDate = undefined;
-      }
-
-      const updatedPhone: Gadget = {
-        ...phone,
-        status: newStatus as GadgetStatus,
-        assignedTo,
-        assignedDate,
-      };
-
-      await updateGadget(updatedPhone);
-      await loadPhones();
-
-      Swal.fire({
-        icon: "success",
-        title: "Status Updated",
-        timer: 1500,
-        showConfirmButton: false,
       });
     }
   }
@@ -226,42 +100,8 @@ export default function Smartphones() {
     }
   }
 
-  function exportCSV() {
-    const csv = [
-      [
-        "Model",
-        "Serial Number",
-        "Processor",
-        "Storage",
-        "Year",
-        "Status",
-        "Assigned To",
-        "Assigned Date",
-      ],
-      ...filtered.map((p) => [
-        p.model,
-        p.serialNumber,
-        p.processor || "",
-        p.storage || "",
-        p.year,
-        p.status,
-        p.assignedTo || "",
-        p.assignedDate || "",
-      ]),
-    ]
-      .map((r) => r.join(","))
-      .join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `smartphones_${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-  }
-
   const filtered = phones.filter((p) => {
-    const matchesSearch = `${p.model} ${p.serialNumber} ${p.assignedTo || ""}`
+    const matchesSearch = `${p.model} ${p.serialNumber} ${p.imei1 || ""} ${p.imei2 || ""} ${p.assignedTo || ""}`
       .toLowerCase()
       .includes(search.toLowerCase());
 
@@ -269,6 +109,35 @@ export default function Smartphones() {
 
     return matchesSearch && matchesStatus;
   });
+
+  // Paginate filtered results
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedData = filtered.slice(startIndex, endIndex);
+
+  // Export columns based on status filter
+  const getExportColumns = () => {
+    const baseColumns = [
+      { key: "model", label: "Model" },
+      { key: "serialNumber", label: "Serial Number" },
+      { key: "imei1", label: "IMEI 1" },
+      { key: "imei2", label: "IMEI 2" },
+      { key: "storage", label: "Storage" },
+      { key: "year", label: "Year" },
+      { key: "status", label: "Status" },
+      { key: "purchaseDate", label: "Purchase Date" }
+    ];
+
+    if (statusFilter === "In-Use") {
+      baseColumns.push({ key: "assignedTo", label: "Assigned To" });
+      baseColumns.push({ key: "gender", label: "Gender" });
+      baseColumns.push({ key: "assignedDate", label: "Assigned Date" });
+    }
+
+    baseColumns.push({ key: "notes", label: "Notes" });
+    return baseColumns;
+  };
 
   const inStock = phones.filter((p) => p.status === "In-Stock").length;
   const inUse = phones.filter((p) => p.status === "In-Use").length;
@@ -279,15 +148,15 @@ export default function Smartphones() {
       <div className="p-6 flex items-center justify-center h-96">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading smartphones...</p>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading smartphones...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* DASHBOARD CARDS */}
+    <div className="p-6 space-y-6 bg-gray-100 dark:bg-gray-900">
+      {/* STATS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Stat title="Total Phones" value={phones.length} icon={<PhoneIcon size={20} />} />
         <Stat title="In Stock" value={inStock} color="text-green-600" />
@@ -295,44 +164,42 @@ export default function Smartphones() {
         <Stat title="Faulty" value={faulty} color="text-red-600" />
       </div>
 
-      {/* ACTION BAR */}
+      {/* FILTERS & ACTIONS */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex gap-4 w-full md:w-auto">
-          <input
-            placeholder="Search smartphones..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border rounded-lg px-4 py-2 flex-1 md:w-72"
-          />
+          <div className="relative flex-1 md:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              placeholder="Search smartphones..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            />
+          </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as GadgetStatus | "All")}
-            className="border rounded-lg px-4 py-2"
-          >
-            <option value="All">All Status</option>
-            <option value="In-Stock">In-Stock</option>
-            <option value="In-Use">In-Use</option>
-            <option value="Faulty">Faulty</option>
-          </select>
+          <div className="flex gap-2">
+            {(["All", "In-Stock", "In-Use", "Faulty"] as const).map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                  statusFilter === status
+                    ? "bg-green-600 text-white"
+                    : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex gap-3">
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 border px-4 py-2 rounded-lg hover:bg-gray-50"
-          >
-            <Upload size={18} />
-            Import Excel
-          </button>
-
-          <button
-            onClick={exportCSV}
-            className="flex items-center gap-2 border px-4 py-2 rounded-lg hover:bg-gray-50"
-          >
-            <Download size={18} />
-            Export CSV
-          </button>
+          <ExportDropdown
+            data={filtered}
+            filename={`Smartphones_${statusFilter}_${new Date().toISOString().split('T')[0]}`}
+            columns={getExportColumns()}
+          />
 
           <button
             onClick={() => navigate("/gadgets/phones/add")}
@@ -344,130 +211,276 @@ export default function Smartphones() {
       </div>
 
       {/* TABLE */}
-      <div className="bg-white rounded-xl shadow overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-100">
-            <tr>
-              {[
-                "Model",
-                "Serial Number",
-                "Processor",
-                "Storage",
-                "Year",
-                "Status",
-                "Assigned To",
-                "Assigned Date",
-                "Actions",
-              ].map((h) => (
-                <th key={h} className="px-4 py-3 text-left whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((p) => (
-              <tr key={p.id} className="border-t hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium">{p.model}</td>
-                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{p.serialNumber}</td>
-                <td className="px-4 py-3 text-gray-600">{p.processor || "—"}</td>
-                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{p.storage || "—"}</td>
-                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{p.year}</td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  <button onClick={() => handleStatusChange(p)}>
-                    <StatusBadge status={p.status} />
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                  {p.assignedTo || "—"}
-                </td>
-                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                  {p.assignedDate || "—"}
-                </td>
-                <td className="px-4 py-3 space-x-3 whitespace-nowrap">
-                  <button
-                    onClick={() => {
-                      setEditing(p);
-                      navigate("/gadgets/phones/add");
-                    }}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleRemove(p.id)}
-                    className="text-red-600 hover:text-red-800"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-
-            {filtered.length === 0 && (
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100 dark:bg-gray-700">
               <tr>
-                <td colSpan={9} className="text-center py-8 text-gray-400">
-                  {search || statusFilter !== "All"
-                    ? "No smartphones found"
-                    : "No smartphones yet. Add your first smartphone!"}
-                </td>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Image</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Product Name</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Serial Number</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Storage</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Year</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Status</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Assigned To</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {paginatedData.map((p) => (
+                <tr key={p.id} className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  {/* IMAGE */}
+                  <td className="px-6 py-4">
+                    {p.imageUrl ? (
+                      <img
+                        src={p.imageUrl}
+                        alt={p.model}
+                        className="w-12 h-12 object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                        <PhoneIcon size={20} className="text-gray-400" />
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{p.model}</td>
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-300 font-mono text-xs">{p.serialNumber || "—"}</td>
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{p.storage || "—"}</td>
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{p.year}</td>
+                  <td className="px-6 py-4">
+                    <StatusBadge status={p.status} />
+                  </td>
+
+                  {/* ASSIGNED TO - ALWAYS VISIBLE */}
+                  <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
+                    {p.assignedTo || "—"}
+                  </td>
+
+                  {/* ACTIONS */}
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          Swal.fire({
+                            title: p.model,
+                            html: `
+                              <div class="text-left">
+                                ${p.imageUrl ? `
+                                  <div class="mb-6">
+                                    <img src="${p.imageUrl}" alt="${p.model}" class="w-full rounded-xl shadow-lg" />
+                                  </div>
+                                ` : ""}
+                                
+                                <!-- Device Info Section -->
+                                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 mb-4">
+                                  <h3 class="font-bold text-lg mb-3 text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                    📱 Device Information
+                                  </h3>
+                                  <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Model</p>
+                                      <p class="font-semibold text-gray-900 dark:text-white">${p.model}</p>
+                                    </div>
+                                    <div>
+                                      <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Year</p>
+                                      <p class="font-semibold text-gray-900 dark:text-white">${p.year}</p>
+                                    </div>
+                                    <div>
+                                      <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Storage</p>
+                                      <p class="font-semibold text-gray-900 dark:text-white">${p.storage || "—"}</p>
+                                    </div>
+                                    <div>
+                                      <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Status</p>
+                                      <span class="px-3 py-1 rounded-full text-xs font-medium ${
+                                        p.status === "In-Stock" ? "bg-green-100 text-green-700" :
+                                        p.status === "In-Use" ? "bg-blue-100 text-blue-700" :
+                                        "bg-red-100 text-red-700"
+                                      }">${p.status}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <!-- Technical Details Section -->
+                                <div class="bg-gradient-to-r from-gray-50 to-slate-50 dark:from-gray-900/20 dark:to-slate-900/20 rounded-xl p-4 mb-4">
+                                  <h3 class="font-bold text-lg mb-3 text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                    🔧 Technical Details
+                                  </h3>
+                                  <div class="space-y-3">
+                                    <div>
+                                      <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Serial Number</p>
+                                      <p class="font-mono text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">${p.serialNumber || "—"}</p>
+                                    </div>
+                                    ${p.imei1 ? `
+                                      <div>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">IMEI 1</p>
+                                        <p class="font-mono text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">${p.imei1}</p>
+                                      </div>
+                                    ` : ""}
+                                    ${p.imei2 ? `
+                                      <div>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">IMEI 2</p>
+                                        <p class="font-mono text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">${p.imei2}</p>
+                                      </div>
+                                    ` : ""}
+                                    ${p.purchaseDate ? `
+                                      <div>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Purchase Date</p>
+                                        <p class="font-semibold text-gray-900 dark:text-white">${new Date(p.purchaseDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                      </div>
+                                    ` : ""}
+                                  </div>
+                                </div>
+
+                                ${p.assignedTo ? `
+                                  <!-- Assignment Section -->
+                                  <div class="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 mb-4">
+                                    <h3 class="font-bold text-lg mb-3 text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                      👤 Assignment Details
+                                    </h3>
+                                    <div class="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Assigned To</p>
+                                        <p class="font-semibold text-gray-900 dark:text-white">${p.assignedTo}</p>
+                                      </div>
+                                      ${p.gender ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Gender</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${p.gender}</p>
+                                        </div>
+                                      ` : ""}
+                                      ${p.assignedDate ? `
+                                        <div class="col-span-2">
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Assigned Date</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${new Date(p.assignedDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                        </div>
+                                      ` : ""}
+                                    </div>
+                                  </div>
+                                ` : ""}
+
+                                ${p.notes ? `
+                                  <!-- Notes Section -->
+                                  <div class="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-xl p-4">
+                                    <h3 class="font-bold text-lg mb-2 text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                      📝 Notes
+                                    </h3>
+                                    <p class="text-gray-700 dark:text-gray-300 italic">${p.notes}</p>
+                                  </div>
+                                ` : ""}
+                              </div>
+                            `,
+                            width: 700,
+                            showConfirmButton: false,
+                            showCloseButton: true,
+                            customClass: {
+                              popup: 'rounded-2xl',
+                              title: 'text-2xl font-bold'
+                            }
+                          });
+                        }}
+                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                        title="View details"
+                      >
+                        <Eye size={18} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditing(p);
+                          navigate("/gadgets/phones/add");
+                        }}
+                        className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+                        title="Edit"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleRemove(p.id)}
+                        className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                        title="Delete"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {paginatedData.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="text-center py-8 text-gray-400 dark:text-gray-500">
+                    {search || statusFilter !== "All"
+                      ? "No smartphones found"
+                      : "No smartphones yet. Add your first smartphone!"}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* PAGINATION */}
+        {filtered.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={(newItemsPerPage) => {
+              setItemsPerPage(newItemsPerPage);
+              setCurrentPage(1);
+            }}
+          />
+        )}
       </div>
 
       {/* ADD/EDIT MODAL */}
       {isAddOpen && (
         <AddGadgetModal
+          isOpen={true}
           deviceType="Smartphone"
           existing={editing || undefined}
-          onSave={handleSave}
+          onSubmit={handleSave}
           onClose={() => {
             setEditing(null);
             navigate("/gadgets/phones");
           }}
         />
       )}
-
-      {/* IMPORT MODAL */}
-      {showImportModal && (
-        <GadgetsExcelImportModal
-          onClose={() => setShowImportModal(false)}
-          onImport={handleImport}
-        />
-      )}
     </div>
   );
 }
 
-/* COMPONENTS */
-
 function Stat({ title, value, color = "", icon }: any) {
   return (
-    <div className="bg-white p-5 rounded-xl shadow">
+    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow border border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm text-gray-500">{title}</p>
-        {icon && <div className="text-gray-400">{icon}</div>}
+        <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
+        {icon && <div className="text-gray-400 dark:text-gray-500">{icon}</div>}
       </div>
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      <p className={`text-2xl font-bold ${color || "text-gray-900 dark:text-white"}`}>{value}</p>
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: GadgetStatus }) {
   const colors = {
-    "In-Stock": "bg-green-100 text-green-700",
-    "In-Use": "bg-blue-100 text-blue-700",
-    Faulty: "bg-red-100 text-red-700",
+    "In-Stock": "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+    "In-Use": "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    Faulty: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
   };
 
   return (
-    <span
-      className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 ${colors[status]}`}
-      title="Click to change status"
-    >
+    <span className={`px-3 py-1 rounded-full text-xs font-medium ${colors[status]}`}>
       {status}
     </span>
   );
 }
+
+
+
+
+
+
+

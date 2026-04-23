@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "./firebase/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "./firebase/firebase";
+import type { User } from "./types/users";
+import { hasPermission } from "./types/users";
+
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Printers from "./pages/Printers";
@@ -24,93 +28,158 @@ import A4SheetReports from "./pages/A4sheetreports";
 import BudgetAnalysis from "./pages/Budgetanalysis";
 import Accessories from "./pages/gadgets/Accessories";
 import SupportTickets from "./pages/SupportTicket";
+import Users from "./pages/Users";
+import Inventory from "./pages/Inventory";
+import InventoryCategory from "./pages/inventory/InventoryCategory";
 
 export default function App() {
-  const [user, setUser] = useState<any>(null);
+  const [firebaseUser, setFirebaseUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", fbUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as Omit<User, "id">;
+            setCurrentUser({
+              id: fbUser.uid,
+              ...userData,
+            });
+          } else {
+            setCurrentUser({
+              id: fbUser.uid,
+              email: fbUser.email || "",
+              name: fbUser.displayName || fbUser.email?.split("@")[0] || "User",
+              role: "Viewer",
+              createdAt: new Date().toISOString(),
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        }
+      } else {
+        setCurrentUser(null);
+      }
+      setFirebaseUser(fbUser);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Show loading spinner while checking auth
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
         </div>
       </div>
     );
   }
 
+  const canAccess = (permission: string) => {
+    if (!currentUser) return false;
+    return hasPermission(currentUser, permission as any);
+  };
+
   return (
     <BrowserRouter>
       <Routes>
-        {/* Login page - redirect to dashboard if already logged in */}
         <Route 
           path="/" 
-          element={user ? <Navigate to="/dashboard" /> : <Login />} 
+          element={firebaseUser ? <Navigate to="/dashboard" /> : <Login />} 
         />
 
-        {/* Protected Admin Routes */}
-        <Route element={user ? <AdminLayout /> : <Navigate to="/" />}>
+        <Route element={firebaseUser ? <AdminLayout currentUser={currentUser} /> : <Navigate to="/" />}>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/printers" element={<Printers />} />
+          
+          {/* PRINTERS */}
+          {canAccess("view_printers") && (
+            <Route path="/printers" element={<Printers />} />
+          )}
 
           {/* TONERS */}
-          <Route path="/toners" element={<Toners />} />
-          <Route path="/toners/add" element={<Toners />} />
-          <Route path="/toners/replace" element={<Toners />} />
-          <Route path="/toners/history" element={<ReplacementHistory />} />
+          {canAccess("view_toners") && (
+            <>
+              <Route path="/toners" element={<Toners />} />
+              <Route path="/toners/add" element={<Toners />} />
+              <Route path="/toners/replace" element={<Toners />} />
+              <Route path="/toners/history" element={<ReplacementHistory />} />
+            </>
+          )}
 
           {/* GADGETS */}
-          <Route path="/gadgets" element={<Gadgets />} />
-          <Route path="/gadgets/add" element={<Gadgets />} />
-          <Route path="/gadgets/laptops" element={<Laptops />} />
-          <Route path="/gadgets/laptops/add" element={<Laptops />} />
-          <Route path="/gadgets/phones" element={<Smartphones />} />
-          <Route path="/gadgets/phones/add" element={<Smartphones />} />
+          {canAccess("view_gadgets") && (
+            <>
+              <Route path="/gadgets" element={<Gadgets />} />
+              <Route path="/gadgets/add" element={<Gadgets />} />
+              <Route path="/gadgets/laptops" element={<Laptops />} />
+              <Route path="/gadgets/laptops/add" element={<Laptops />} />
+              <Route path="/gadgets/phones" element={<Smartphones />} />
+              <Route path="/gadgets/phones/add" element={<Smartphones />} />
+              <Route path="/gadgets/accessories" element={<Accessories />} />
+              <Route path="/gadgets/accessories/add" element={<Accessories />} />
+            </>
+          )}
 
           {/* INTERNET USAGE */}
-          <Route path="/internet-usage" element={<InternetUsage />} />
-          <Route path="/internet-usage/add" element={<InternetUsage />} />
-
-          // Inside your Routes:
-<Route path="/gadgets/accessories" element={<Accessories />} />
-<Route path="/gadgets/accessories/add" element={<Accessories />} />
-
-          {/* Reports Routes */}
-          <Route path="reports" element={<Reports />} />
-          <Route path="reports/toners" element={<TonerReports />} />
-          <Route path="reports/gadgets" element={<GadgetReports />} />
-          <Route path="reports/internet" element={<InternetReports />} />
-          <Route path="reports/a4sheets" element={<A4SheetReports />} />
-          <Route path="reports/consolidated" element={<ConsolidatedReport />} />
-           <Route path="reports/budget" element={<BudgetAnalysis />} />
-
-           <Route path="support-tickets" element={<SupportTickets />} />
+          {canAccess("view_internet_usage") && (
+            <>
+              <Route path="/internet-usage" element={<InternetUsage />} />
+              <Route path="/internet-usage/add" element={<InternetUsage />} />
+            </>
+          )}
 
           {/* A4 SHEETS */}
-          <Route path="/a4-sheets" element={<A4Sheets />} />
+          {canAccess("view_a4_sheets") && (
+            <Route path="/a4-sheets" element={<A4Sheets />} />
+          )}
+
+          {/* INVENTORY - FIXED: Use dynamic :category parameter */}
+          {canAccess("view_inventory") && (
+            <>
+              <Route path="/inventory" element={<Inventory />} />
+              <Route path="/inventory/:category" element={<InventoryCategory />} />
+            </>
+          )}
+
+          {/* REPORTS */}
+          {canAccess("view_reports") && (
+            <>
+              <Route path="reports" element={<Reports />} />
+              <Route path="reports/toners" element={<TonerReports />} />
+              <Route path="reports/gadgets" element={<GadgetReports />} />
+              <Route path="reports/internet" element={<InternetReports />} />
+              <Route path="reports/a4sheets" element={<A4SheetReports />} />
+              <Route path="reports/consolidated" element={<ConsolidatedReport />} />
+              <Route path="reports/budget" element={<BudgetAnalysis />} />
+            </>
+          )}
+
+          {/* SUPPORT TICKETS */}
+          <Route path="support-tickets" element={<SupportTickets />} />
+
+          {/* USERS */}
+          {canAccess("manage_users") && (
+            <Route path="/users" element={<Users />} />
+          )}
 
           {/* SETTINGS */}
-          <Route path="/settings" element={<Settings />} />
+          {canAccess("manage_settings") && (
+            <Route path="/settings" element={<Settings />} />
+          )}
 
           {/* PROFILE */}
           <Route path="/profile" element={<Profile />} />
         </Route>
 
-        {/* Catch all - redirect to login or dashboard */}
         <Route 
           path="*" 
-          element={<Navigate to={user ? "/dashboard" : "/"} />} 
+          element={<Navigate to={firebaseUser ? "/dashboard" : "/"} />} 
         />
       </Routes>
     </BrowserRouter>

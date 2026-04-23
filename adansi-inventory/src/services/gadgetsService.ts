@@ -1,4 +1,15 @@
-// src/services/gadgetsService.ts - FIXED VERSION
+
+
+
+
+
+
+
+
+
+
+
+// src/services/gadgetsService.ts - COMPLETE FIXED VERSION
 
 import {
   collection,
@@ -47,7 +58,6 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
 
     // Validate device-specific requirements
     if (gadget.deviceType === "Accessory") {
-      // For accessories, require accessory type and quantity
       if (!gadget.accessoryType) {
         throw new Error("Accessory Type is required");
       }
@@ -55,7 +65,6 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
         throw new Error("Quantity is required and must be 0 or greater");
       }
     } else {
-      // For Laptop/Smartphone, require serial number
       if (!gadget.serialNumber || !gadget.serialNumber.trim()) {
         throw new Error("Serial Number is required for Laptop/Smartphone");
       }
@@ -70,6 +79,16 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
       createdAt: Timestamp.now(),
     };
 
+    // ✅ ADD PURCHASE DATE (NEW)
+    if (gadget.purchaseDate) {
+      cleanGadget.purchaseDate = gadget.purchaseDate;
+    }
+
+    // ✅ ADD IMAGE URL (NEW)
+    if (gadget.imageUrl && gadget.imageUrl.trim()) {
+      cleanGadget.imageUrl = gadget.imageUrl.trim();
+    }
+
     // Add device-specific fields
     if (gadget.deviceType === "Accessory") {
       cleanGadget.accessoryType = gadget.accessoryType;
@@ -81,9 +100,6 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
       }
       if (gadget.specifications && gadget.specifications.trim()) {
         cleanGadget.specifications = gadget.specifications.trim();
-      }
-      if (gadget.purchaseDate) {
-        cleanGadget.purchaseDate = gadget.purchaseDate;
       }
       if (gadget.location && gadget.location.trim()) {
         cleanGadget.location = gadget.location.trim();

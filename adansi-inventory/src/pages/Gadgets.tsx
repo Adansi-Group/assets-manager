@@ -4,300 +4,173 @@
 
 
 
-
-
-// src/pages/Gadgets.tsx - CORRECT VERSION WITH GENDER
+// src/pages/Gadgets.tsx - WITH BEAUTIFUL DETAILS MODAL FOR ALL TYPES
 
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import AddGadgetModal from "../components/AddGadgetModal";
-import ViewGadgetDetailsModal from "../components/ViewGadgetDetailsModal";
-import GadgetsExcelImportModal from "../components/ExcelImportModal";
+import { getGadgets, addGadget, updateGadget, deleteGadget } from "../services/gadgetsService";
 import type { Gadget, GadgetStatus } from "../types/gadget";
-import {
-  getGadgets,
-  addGadget,
-  updateGadget,
-  deleteGadget,
-} from "../services/gadgetsService";
+import AddGadgetModal from "../components/AddGadgetModal";
+import Pagination from "../components/Pagination";
+import { Plus, Search, Trash2, Eye, MonitorSmartphone, Edit } from "lucide-react";
 import Swal from "sweetalert2";
-import { Download, Smartphone, Laptop, Upload, Package } from "lucide-react";
+import ExportDropdown from "../components/ExportDropdown";
 
 export default function Gadgets() {
   const [gadgets, setGadgets] = useState<Gadget[]>([]);
-  const [editing, setEditing] = useState<Gadget | null>(null);
-  const [viewing, setViewing] = useState<Gadget | null>(null);
-  const [search, setSearch] = useState("");
+  const [filteredGadgets, setFilteredGadgets] = useState<Gadget[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<GadgetStatus | "All">("All");
-  const [showImportModal, setShowImportModal] = useState(false);
-
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const isAddOpen = location.pathname === "/gadgets/add";
-
-  async function loadGadgets() {
-    setLoading(true);
-    const data = await getGadgets();
-    setGadgets(data);
-    setLoading(false);
-  }
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editing, setEditing] = useState<Gadget | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
     loadGadgets();
   }, []);
 
-  async function handleSave(gadget: Gadget | Omit<Gadget, "id">) {
+  useEffect(() => {
+    filterGadgets();
+  }, [gadgets, searchQuery, statusFilter]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter]);
+
+  async function loadGadgets() {
+    setLoading(true);
     try {
-      if ("id" in gadget) {
-        await updateGadget(gadget);
-      } else {
-        await addGadget(gadget);
-      }
-
-      await loadGadgets();
-      setEditing(null);
-      navigate("/gadgets");
-
-      Swal.fire({
-        icon: "success",
-        title: "id" in gadget ? "Updated Successfully" : "Added Successfully",
-        timer: 1500,
-        showConfirmButton: false,
-      });
-    } catch (error: any) {
-      console.error("Save error:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: error.message || "Failed to save gadget",
-      });
+      const data = await getGadgets();
+      setGadgets(data);
+    } catch (error) {
+      console.error("Error loading gadgets:", error);
+    } finally {
+      setLoading(false);
     }
   }
 
-  async function handleImport(importedGadgets: Omit<Gadget, "id">[]) {
+  function filterGadgets() {
+    let filtered = gadgets;
+
+    // Filter by status
+    if (statusFilter !== "All") {
+      filtered = filtered.filter(g => g.status === statusFilter);
+    }
+
+    // Filter by search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(g =>
+        g.model.toLowerCase().includes(query) ||
+        g.assignedTo?.toLowerCase().includes(query) ||
+        g.serialNumber?.toLowerCase().includes(query) ||
+        g.imei1?.toLowerCase().includes(query) ||
+        g.imei2?.toLowerCase().includes(query) ||
+        g.location?.toLowerCase().includes(query)
+      );
+    }
+
+    setFilteredGadgets(filtered);
+  }
+
+  async function handleAddGadget(data: Omit<Gadget, "id"> | Gadget) {
     try {
-      console.log("Starting import of", importedGadgets.length, "gadgets");
+      if ("id" in data) {
+        // Editing existing gadget
+        await updateGadget(data);
+      } else {
+        // Adding new gadget
+        await addGadget(data);
+      }
       
-      let successCount = 0;
-      let failCount = 0;
-      const errors: string[] = [];
-
-      for (const gadget of importedGadgets) {
-        try {
-          console.log("Importing gadget:", gadget);
-          await addGadget(gadget);
-          successCount++;
-        } catch (err: any) {
-          failCount++;
-          console.error("Failed to import gadget:", gadget, err);
-          errors.push(`${gadget.model}: ${err.message}`);
-        }
-      }
-
       await loadGadgets();
-      setShowImportModal(false);
-
-      if (failCount > 0) {
-        Swal.fire({
-          icon: "warning",
-          title: "Partial Import",
-          html: `
-            <p>${successCount} gadget(s) imported successfully.</p>
-            <p class="text-red-600">${failCount} failed to import.</p>
-            <details class="mt-2 text-left text-sm">
-              <summary>Show errors</summary>
-              <ul class="mt-2 list-disc list-inside">
-                ${errors.map(e => `<li>${e}</li>`).join("")}
-              </ul>
-            </details>
-          `,
-        });
-      } else {
-        Swal.fire({
-          title: "Import Successful!",
-          text: `${successCount} gadget(s) have been imported successfully.`,
-          icon: "success",
-          timer: 2000,
-          showConfirmButton: false,
-        });
-      }
-    } catch (error: any) {
-      console.error("Import error:", error);
-      Swal.fire({
-        title: "Import Failed",
-        text: error.message || "An error occurred while importing gadgets.",
-        icon: "error",
-      });
-    }
-  }
-
-  async function handleStatusChange(gadget: Gadget) {
-    const { value: newStatus } = await Swal.fire({
-      title: "Change Status",
-      input: "select",
-      inputOptions: {
-        "In-Stock": "In-Stock",
-        "In-Use": "In-Use",
-        Faulty: "Faulty",
-      },
-      inputValue: gadget.status,
-      showCancelButton: true,
-      confirmButtonColor: "#16a34a",
-      confirmButtonText: "Update",
-    });
-
-    if (newStatus) {
-      let assignedTo = gadget.assignedTo;
-      let assignedDate = gadget.assignedDate;
-      let gender = gadget.gender;
-
-      if (newStatus === "In-Use") {
-        const { value: employee } = await Swal.fire({
-          title: "Assign To",
-          input: "text",
-          inputPlaceholder: "Employee name",
-          inputValue: gadget.assignedTo || "",
-          showCancelButton: true,
-        });
-
-        if (employee) {
-          assignedTo = employee;
-          assignedDate = new Date().toISOString().split("T")[0];
-          
-          const { value: selectedGender } = await Swal.fire({
-            title: "Select Gender",
-            input: "select",
-            inputOptions: {
-              "": "Not specified",
-              "Male": "Male",
-              "Female": "Female",
-            },
-            inputValue: gadget.gender || "",
-            showCancelButton: true,
-          });
-          
-          gender = selectedGender || undefined;
-        }
-      } else {
-        assignedTo = undefined;
-        assignedDate = undefined;
-        gender = undefined;
-      }
-
-      const updatedGadget: Gadget = {
-        ...gadget,
-        status: newStatus as GadgetStatus,
-        assignedTo,
-        assignedDate,
-        gender,
-      };
-
-      await updateGadget(updatedGadget);
-      await loadGadgets();
-
+      setShowAddModal(false);
+      setEditing(null);
+      
       Swal.fire({
         icon: "success",
-        title: "Status Updated",
+        title: "id" in data ? "Gadget Updated!" : "Gadget Added!",
         timer: 1500,
-        showConfirmButton: false,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      console.error("Error saving gadget:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Failed",
+        text: "Could not save gadget"
       });
     }
   }
 
-  async function handleRemove(id: string) {
+  async function handleDeleteGadget(id: string) {
     const result = await Swal.fire({
-      title: "Are you sure?",
-      text: "This gadget will be permanently deleted",
+      title: "Delete Gadget?",
+      text: "This action cannot be undone",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#16a34a",
-      cancelButtonColor: "#dc2626",
-      confirmButtonText: "Yes, delete it",
+      confirmButtonColor: "#dc2626",
+      confirmButtonText: "Yes, delete"
     });
 
     if (result.isConfirmed) {
-      await deleteGadget(id);
-      await loadGadgets();
-
-      Swal.fire({
-        title: "Deleted!",
-        text: "Gadget has been deleted.",
-        icon: "success",
-        timer: 1500,
-        showConfirmButton: false,
-      });
+      try {
+        await deleteGadget(id);
+        await loadGadgets();
+        Swal.fire({
+          icon: "success",
+          title: "Deleted!",
+          timer: 1500,
+          showConfirmButton: false
+        });
+      } catch (error) {
+        Swal.fire({
+          icon: "error",
+          title: "Failed",
+          text: "Could not delete gadget"
+        });
+      }
     }
   }
 
-  function exportCSV() {
-    const csv = [
-      [
-        "Device Type",
-        "Model",
-        "Serial Number",
-        "Processor",
-        "Storage",
-        "Year",
-        "Status",
-        "Assigned To",
-        "Gender",
-        "Assigned Date",
-        "Accessory Type",
-        "Quantity",
-        "Condition",
-        "Compatible With",
-        "Specifications",
-        "Location",
-      ],
-      ...filtered.map((g) => [
-        g.deviceType,
-        g.model,
-        g.serialNumber || "",
-        g.processor || "",
-        g.storage || "",
-        g.year,
-        g.status,
-        g.assignedTo || "",
-        g.gender || "",
-        g.assignedDate || "",
-        g.accessoryType || "",
-        g.quantity || "",
-        g.condition || "",
-        g.compatibleWith || "",
-        g.specifications || "",
-        g.location || "",
-      ]),
-    ]
-      .map((r) => r.join(","))
-      .join("\n");
+  // Paginate filtered results
+  const totalPages = Math.ceil(filteredGadgets.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedData = filteredGadgets.slice(startIndex, endIndex);
 
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `gadgets_${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-  }
+  // Prepare export data with conditional columns
+  const getExportColumns = () => {
+    const baseColumns = [
+      { key: "deviceType", label: "Type" },
+      { key: "model", label: "Model" },
+      { key: "year", label: "Year" },
+      { key: "status", label: "Status" },
+      { key: "purchaseDate", label: "Purchase Date" }
+    ];
 
-  const filtered = gadgets.filter((g) => {
-    const matchesSearch = `${g.model} ${g.serialNumber || ""} ${g.deviceType} ${g.assignedTo || ""} ${g.accessoryType || ""} ${g.location || ""}`
-      .toLowerCase()
-      .includes(search.toLowerCase());
+    // Add conditional columns based on filter
+    if (statusFilter === "In-Use") {
+      baseColumns.push({ key: "assignedTo", label: "Assigned To" });
+      baseColumns.push({ key: "gender", label: "Gender" });
+      baseColumns.push({ key: "assignedDate", label: "Assigned Date" });
+    } else if (statusFilter === "In-Stock") {
+      baseColumns.push({ key: "location", label: "Location" });
+    }
 
-    const matchesStatus = statusFilter === "All" || g.status === statusFilter;
+    baseColumns.push({ key: "notes", label: "Notes" });
+    return baseColumns;
+  };
 
-    return matchesSearch && matchesStatus;
-  });
-
+  // Get stats
   const totalGadgets = gadgets.length;
-  const laptops = gadgets.filter((g) => g.deviceType === "Laptop").length;
-  const phones = gadgets.filter((g) => g.deviceType === "Smartphone").length;
-  const accessories = gadgets.filter((g) => g.deviceType === "Accessory").length;
-  const inStock = gadgets.filter((g) => g.status === "In-Stock").length;
-  const inUse = gadgets.filter((g) => g.status === "In-Use").length;
-  const faulty = gadgets.filter((g) => g.status === "Faulty").length;
+  const inStock = gadgets.filter(g => g.status === "In-Stock").length;
+  const inUse = gadgets.filter(g => g.status === "In-Use").length;
+  const faulty = gadgets.filter(g => g.status === "Faulty").length;
 
   if (loading) {
     return (
@@ -310,299 +183,431 @@ export default function Gadgets() {
     );
   }
 
+
   return (
     <div className="p-6 space-y-6 bg-gray-100 dark:bg-gray-900">
-      <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
-        <Stat title="Total Gadgets" value={totalGadgets} />
-        <Stat title="Laptops" value={laptops} icon={<Laptop size={20} />} color="text-purple-600" />
-        <Stat title="Phones" value={phones} icon={<Smartphone size={20} />} color="text-indigo-600" />
-        <Stat title="Accessories" value={accessories} icon={<Package size={20} />} color="text-orange-600" />
-        <Stat title="In Stock" value={inStock} color="text-green-600" />
-        <Stat title="In Use" value={inUse} color="text-blue-600" />
-        <Stat title="Faulty" value={faulty} color="text-red-600" />
-      </div>
-
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex gap-4 w-full md:w-auto">
-          <input
-            placeholder="Search gadgets..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 flex-1 md:w-72 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-          />
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as GadgetStatus | "All")}
-            className="border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-          >
-            <option value="All">All Status</option>
-            <option value="In-Stock">In-Stock</option>
-            <option value="In-Use">In-Use</option>
-            <option value="Faulty">Faulty</option>
-          </select>
+      {/* HEADER */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">All Gadgets</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Manage all gadgets across the organization
+          </p>
         </div>
-
         <div className="flex gap-3">
+          <ExportDropdown
+            data={filteredGadgets}
+            filename={`Gadgets_${statusFilter}_${new Date().toISOString().split('T')[0]}`}
+            columns={getExportColumns()}
+          />
           <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 border border-gray-300 dark:border-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-white"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
           >
-            <Upload size={18} />
-            Import Excel
-          </button>
-
-          <button
-            onClick={exportCSV}
-            className="flex items-center gap-2 border border-gray-300 dark:border-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-white"
-          >
-            <Download size={18} />
-            Export CSV
-          </button>
-
-          <button
-            onClick={() => navigate("/gadgets/add")}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-          >
+            <Plus size={20} />
             Add Gadget
           </button>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-100 dark:bg-gray-700">
-            <tr>
-              {[
-                "Device Type",
-                "Model/Name",
-                "Serial/Qty",
-                "Specs",
-                "Year",
-                "Status",
-                "Assigned To",
-                "Location",
-                "Actions",
-              ].map((h) => (
-                <th key={h} className="px-4 py-3 text-left whitespace-nowrap text-gray-900 dark:text-white">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((g) => (
-              <tr key={g.id} className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-                <td className="px-4 py-3 whitespace-nowrap">
-                  <DeviceTypeBadge type={g.deviceType} />
-                </td>
+      {/* STATS */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
+              <MonitorSmartphone className="text-blue-600 dark:text-blue-300" size={24} />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalGadgets}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Total Gadgets</p>
+            </div>
+          </div>
+        </div>
 
-                <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                  <div>
-                    {g.model}
-                    {g.deviceType === "Accessory" && g.accessoryType && (
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {g.accessoryType}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-green-100 dark:bg-green-900 rounded-lg">
+              <MonitorSmartphone className="text-green-600 dark:text-green-300" size={24} />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{inStock}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">In Stock</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-lg">
+              <MonitorSmartphone className="text-purple-600 dark:text-purple-300" size={24} />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{inUse}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">In Use</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-red-100 dark:bg-red-900 rounded-lg">
+              <MonitorSmartphone className="text-red-600 dark:text-red-300" size={24} />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{faulty}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Faulty</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* FILTERS */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Search */}
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                placeholder="Search by model, assigned to, serial number, IMEI..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
+            </div>
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex gap-2">
+            {(["All", "In-Stock", "In-Use", "Faulty"] as const).map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  statusFilter === status
+                    ? "bg-green-600 text-white"
+                    : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* TABLE */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100 dark:bg-gray-700">
+              <tr>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Image</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Type</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Model</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Year</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Status</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Assigned To</th>
+                <th className="px-6 py-3 text-left text-gray-900 dark:text-white">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedData.map((gadget) => (
+                <tr
+                  key={gadget.id}
+                  className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  {/* IMAGE */}
+                  <td className="px-6 py-4">
+                    {gadget.imageUrl ? (
+                      <img
+                        src={gadget.imageUrl}
+                        alt={gadget.model}
+                        className="w-12 h-12 object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                        <MonitorSmartphone size={20} className="text-gray-400" />
                       </div>
                     )}
-                  </div>
-                </td>
+                  </td>
 
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                  {g.deviceType === "Accessory" ? (
-                    <span className="inline-flex items-center gap-1">
-                      <span className="font-semibold text-gray-900 dark:text-white">
-                        {g.quantity || 0}
-                      </span>
-                      <span className="text-xs">units</span>
+                  {/* TYPE */}
+                  <td className="px-6 py-4">
+                    <span className="px-3 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-full text-xs font-medium">
+                      {gadget.deviceType}
                     </span>
-                  ) : (
-                    <span className="font-mono text-xs">{g.serialNumber || "—"}</span>
-                  )}
-                </td>
+                  </td>
 
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
-                  {g.deviceType === "Accessory" ? (
-                    <div className="text-xs">
-                      {g.specifications || "—"}
-                      {g.compatibleWith && (
-                        <div className="text-gray-500 dark:text-gray-400 mt-1">
-                          ↳ {g.compatibleWith}
-                        </div>
-                      )}
+                  {/* MODEL */}
+                  <td className="px-6 py-4">
+                    <p className="font-medium text-gray-900 dark:text-white">{gadget.model}</p>
+                    {gadget.serialNumber && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">SN: {gadget.serialNumber}</p>
+                    )}
+                  </td>
+
+                  {/* YEAR */}
+                  <td className="px-6 py-4 text-gray-700 dark:text-gray-300">{gadget.year}</td>
+
+                  {/* STATUS */}
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      gadget.status === "In-Stock"
+                        ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                        : gadget.status === "In-Use"
+                        ? "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+                        : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+                    }`}>
+                      {gadget.status}
+                    </span>
+                  </td>
+
+                  {/* ASSIGNED TO - ALWAYS VISIBLE */}
+                  <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
+                    {gadget.assignedTo || "—"}
+                  </td>
+
+                  {/* ACTIONS */}
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const isSmartphone = gadget.deviceType === "Smartphone";
+                          const isLaptop = gadget.deviceType === "Laptop";
+                          const isAccessory = gadget.deviceType === "Accessory";
+                          
+                          Swal.fire({
+                            title: gadget.model,
+                            html: `
+                              <div class="text-left">
+                                ${gadget.imageUrl ? `
+                                  <div class="mb-6">
+                                    <img src="${gadget.imageUrl}" alt="${gadget.model}" class="w-full rounded-xl shadow-lg" />
+                                  </div>
+                                ` : ""}
+                                
+                                <!-- Device Info Section -->
+                                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 mb-4">
+                                  <h3 class="font-bold text-lg mb-3 text-gray-800 dark:text-gray-200">
+                                    ${isSmartphone ? "📱" : isLaptop ? "💻" : "📦"} ${isAccessory ? "Accessory" : "Device"} Information
+                                  </h3>
+                                  <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">${isAccessory ? "Name" : "Model"}</p>
+                                      <p class="font-semibold text-gray-900 dark:text-white">${gadget.model}</p>
+                                    </div>
+                                    ${isAccessory ? `
+                                      <div>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Type</p>
+                                        <p class="font-semibold text-gray-900 dark:text-white">${gadget.accessoryType || "—"}</p>
+                                      </div>
+                                      <div>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Quantity</p>
+                                        <p class="font-semibold text-gray-900 dark:text-white text-2xl">${gadget.quantity || 0} <span class="text-sm">units</span></p>
+                                      </div>
+                                      <div>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Condition</p>
+                                        <p class="font-semibold text-gray-900 dark:text-white">${gadget.condition || "—"}</p>
+                                      </div>
+                                    ` : `
+                                      <div>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Year</p>
+                                        <p class="font-semibold text-gray-900 dark:text-white">${gadget.year}</p>
+                                      </div>
+                                      ${isLaptop && gadget.processor ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Processor</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${gadget.processor}</p>
+                                        </div>
+                                      ` : ""}
+                                      ${gadget.storage ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Storage</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${gadget.storage}</p>
+                                        </div>
+                                      ` : ""}
+                                    `}
+                                    <div class="${isAccessory ? '' : 'col-span-2'}">
+                                      <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Status</p>
+                                      <span class="px-3 py-1 rounded-full text-xs font-medium ${
+                                        gadget.status === "In-Stock" ? "bg-green-100 text-green-700" :
+                                        gadget.status === "In-Use" ? "bg-blue-100 text-blue-700" :
+                                        "bg-red-100 text-red-700"
+                                      }">${gadget.status}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <!-- Technical Details (for Laptop/Smartphone) -->
+                                ${!isAccessory ? `
+                                  <div class="bg-gradient-to-r from-gray-50 to-slate-50 dark:from-gray-900/20 dark:to-slate-900/20 rounded-xl p-4 mb-4">
+                                    <h3 class="font-bold text-lg mb-3 text-gray-800 dark:text-gray-200">🔧 Technical Details</h3>
+                                    <div class="space-y-3">
+                                      ${gadget.serialNumber ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Serial Number</p>
+                                          <p class="font-mono text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">${gadget.serialNumber}</p>
+                                        </div>
+                                      ` : ""}
+                                      ${isSmartphone && gadget.imei1 ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">IMEI 1</p>
+                                          <p class="font-mono text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">${gadget.imei1}</p>
+                                        </div>
+                                      ` : ""}
+                                      ${isSmartphone && gadget.imei2 ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">IMEI 2</p>
+                                          <p class="font-mono text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">${gadget.imei2}</p>
+                                        </div>
+                                      ` : ""}
+                                      ${gadget.purchaseDate ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Purchase Date</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${new Date(gadget.purchaseDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                        </div>
+                                      ` : ""}
+                                    </div>
+                                  </div>
+                                ` : ""}
+
+                                <!-- Specifications (for Accessories) -->
+                                ${isAccessory ? `
+                                  <div class="bg-gradient-to-r from-gray-50 to-slate-50 dark:from-gray-900/20 dark:to-slate-900/20 rounded-xl p-4 mb-4">
+                                    <h3 class="font-bold text-lg mb-3 text-gray-800 dark:text-gray-200">🔧 Specifications</h3>
+                                    <div class="space-y-3">
+                                      ${gadget.specifications ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Specifications</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${gadget.specifications}</p>
+                                        </div>
+                                      ` : ""}
+                                      ${gadget.compatibleWith ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Compatible With</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${gadget.compatibleWith}</p>
+                                        </div>
+                                      ` : ""}
+                                      ${gadget.location ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Storage Location</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${gadget.location}</p>
+                                        </div>
+                                      ` : ""}
+                                    </div>
+                                  </div>
+                                ` : ""}
+
+                                ${gadget.assignedTo ? `
+                                  <!-- Assignment Section -->
+                                  <div class="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 mb-4">
+                                    <h3 class="font-bold text-lg mb-3 text-gray-800 dark:text-gray-200">👤 Assignment Details</h3>
+                                    <div class="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Assigned To</p>
+                                        <p class="font-semibold text-gray-900 dark:text-white">${gadget.assignedTo}</p>
+                                      </div>
+                                      ${gadget.gender ? `
+                                        <div>
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Gender</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${gadget.gender}</p>
+                                        </div>
+                                      ` : ""}
+                                      ${gadget.assignedDate ? `
+                                        <div class="col-span-2">
+                                          <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Assigned Date</p>
+                                          <p class="font-semibold text-gray-900 dark:text-white">${new Date(gadget.assignedDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                        </div>
+                                      ` : ""}
+                                    </div>
+                                  </div>
+                                ` : ""}
+
+                                ${gadget.notes ? `
+                                  <!-- Notes Section -->
+                                  <div class="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-xl p-4">
+                                    <h3 class="font-bold text-lg mb-2 text-gray-800 dark:text-gray-200">📝 Notes</h3>
+                                    <p class="text-gray-700 dark:text-gray-300 italic">${gadget.notes}</p>
+                                  </div>
+                                ` : ""}
+                              </div>
+                            `,
+                            width: 700,
+                            showConfirmButton: false,
+                            showCloseButton: true,
+                            customClass: {
+                              popup: 'rounded-2xl',
+                              title: 'text-2xl font-bold'
+                            }
+                          });
+                        }}
+                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                        title="View details"
+                      >
+                        <Eye size={18} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditing(gadget);
+                          setShowAddModal(true);
+                        }}
+                        className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+                        title="Edit"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteGadget(gadget.id)}
+                        className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                        title="Delete"
+                      >
+                        <Trash2 size={18} />
+                      </button>
                     </div>
-                  ) : (
-                    <div className="text-xs">
-                      {g.processor && <div>{g.processor}</div>}
-                      {g.storage && <div className="text-gray-500 dark:text-gray-400">{g.storage}</div>}
-                      {!g.processor && !g.storage && "—"}
-                    </div>
-                  )}
-                </td>
+                  </td>
+                </tr>
+              ))}
 
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                  {g.year}
-                </td>
+              {paginatedData.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-gray-400 dark:text-gray-500">
+                    No gadgets found. Click "Add Gadget" to get started.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-                <td className="px-4 py-3 whitespace-nowrap">
-                  <button onClick={() => handleStatusChange(g)}>
-                    <StatusBadge status={g.status} />
-                  </button>
-                  {g.deviceType === "Accessory" && g.condition && (
-                    <div className="mt-1">
-                      <ConditionBadge condition={g.condition} />
-                    </div>
-                  )}
-                </td>
-
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                  {g.assignedTo || "—"}
-                  {g.assignedDate && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {g.assignedDate}
-                      {g.gender && ` • ${g.gender}`}
-                    </div>
-                  )}
-                </td>
-
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                  {g.location || "—"}
-                </td>
-
-                <td className="px-4 py-3 space-x-3 whitespace-nowrap">
-                  <button
-                    onClick={() => setViewing(g)}
-                    className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300"
-                    title="View Details"
-                  >
-                    View
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditing(g);
-                      navigate("/gadgets/add");
-                    }}
-                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleRemove(g.id)}
-                    className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={9} className="text-center py-8 text-gray-400 dark:text-gray-500">
-                  {search || statusFilter !== "All"
-                    ? "No gadgets found"
-                    : "No gadgets yet. Add your first gadget!"}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        {/* PAGINATION */}
+        {filteredGadgets.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredGadgets.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={(newItemsPerPage) => {
+              setItemsPerPage(newItemsPerPage);
+              setCurrentPage(1);
+            }}
+          />
+        )}
       </div>
 
-      {isAddOpen && (
-        <AddGadgetModal
-          existing={editing || undefined}
-          onSave={handleSave}
-          onClose={() => {
-            setEditing(null);
-            navigate("/gadgets");
-          }}
-        />
-      )}
-
-      {viewing && (
-        <ViewGadgetDetailsModal
-          gadget={viewing}
-          onClose={() => setViewing(null)}
-          onEdit={() => {
-            setEditing(viewing);
-            setViewing(null);
-            navigate("/gadgets/add");
-          }}
-        />
-      )}
-
-      {showImportModal && (
-        <GadgetsExcelImportModal
-          onClose={() => setShowImportModal(false)}
-          onImport={handleImport}
-        />
-      )}
+      {/* ADD/EDIT MODAL */}
+      <AddGadgetModal
+        isOpen={showAddModal}
+        deviceType={editing?.deviceType || "Laptop"}
+        existing={editing || undefined}
+        onClose={() => {
+          setShowAddModal(false);
+          setEditing(null);
+        }}
+        onSubmit={handleAddGadget}
+      />
     </div>
-  );
-}
-
-function Stat({ title, value, color = "", icon }: any) {
-  return (
-    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-        {icon && <div className="text-gray-400 dark:text-gray-500">{icon}</div>}
-      </div>
-      <p className={`text-2xl font-bold ${color || "text-gray-900 dark:text-white"}`}>{value}</p>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: "In-Stock" | "In-Use" | "Faulty" }) {
-  const colors = {
-    "In-Stock": "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    "In-Use": "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-    Faulty: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  };
-
-  return (
-    <span
-      className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 ${colors[status]}`}
-      title="Click to change status"
-    >
-      {status}
-    </span>
-  );
-}
-
-function DeviceTypeBadge({ type }: { type: "Laptop" | "Smartphone" | "Accessory" }) {
-  const colors = {
-    Laptop: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-    Smartphone: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-    Accessory: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-  };
-
-  const icons = {
-    Laptop: "💻",
-    Smartphone: "📱",
-    Accessory: "🔌",
-  };
-
-  return (
-    <span className={`px-3 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 ${colors[type]}`}>
-      <span>{icons[type]}</span>
-      {type}
-    </span>
-  );
-}
-
-function ConditionBadge({ condition }: { condition: "New" | "Good" | "Fair" | "Poor" }) {
-  const colors = {
-    New: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    Good: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-    Fair: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-    Poor: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  };
-
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors[condition]}`}>
-      {condition}
-    </span>
   );
 }

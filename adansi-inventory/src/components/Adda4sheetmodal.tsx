@@ -132,7 +132,7 @@ export default function AddA4SheetModal({ onClose, onSave, sheet, officeNames }:
             {/* Current Quantity */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-900 dark:text-white">
-                Current Quantity (Reams) *
+                Current Quantity (Box) *
               </label>
               <input
                 type="number"
@@ -147,7 +147,7 @@ export default function AddA4SheetModal({ onClose, onSave, sheet, officeNames }:
             {/* Initial Quantity */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-900 dark:text-white">
-                Initial Quantity (Reams) *
+                Initial Quantity (Boxes) *
               </label>
               <input
                 type="number"
@@ -197,7 +197,7 @@ export default function AddA4SheetModal({ onClose, onSave, sheet, officeNames }:
             {/* Cost Per Ream */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-900 dark:text-white">
-                Cost Per Ream (GH₵) *
+                Cost Per Box (GH₵) *
               </label>
               <input
                 type="number"
