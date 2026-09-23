@@ -75,6 +75,15 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
     (async () => setTonerTypes(await getAllTonerTypes()))();
   }, []);
 
+  // The saved cartridge stays a visible, selected option even when it is not
+  // in the catalogue — same idea as `selectablePrinterModels` in
+  // src/toners/stockMatching.ts, so a value never gets silently dropped.
+  const currentTonerType = tonerType.trim();
+  const tonerTypeOptions =
+    currentTonerType && !tonerTypes.includes(currentTonerType)
+      ? [currentTonerType, ...tonerTypes]
+      : tonerTypes;
+
   async function handleAddCustomLocation() {
     if (customLocation.trim()) {
       const trimmedLocation = customLocation.trim();
@@ -124,6 +133,13 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
 
     // Validate that printerColorType is not empty
     if (!printerColorType) {
+      return;
+    }
+
+    // Validate that a cartridge was chosen. The select below always renders,
+    // even with an empty catalogue, so this cannot be bypassed by there being
+    // nothing to pick from.
+    if (!tonerType.trim()) {
       return;
     }
 
@@ -240,22 +256,24 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
               <label className="block text-sm font-medium mb-2">
                 Toner Type <span className="text-red-500">*</span>
               </label>
-              {tonerTypes.length > 0 ? (
-                <select
-                  value={tonerType}
-                  onChange={(e) => setTonerType(e.target.value)}
-                  required
-                  className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-green-500 focus:outline-none"
-                >
-                  <option value="">Select the cartridge this printer takes</option>
-                  {tonerTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-sm text-red-500">
+              <select
+                value={tonerType}
+                onChange={(e) => setTonerType(e.target.value)}
+                required
+                className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-green-500 focus:outline-none"
+              >
+                <option value="">Select the cartridge this printer takes</option>
+                {/* A saved cartridge not in the catalogue (declined merge, or a name that only
+                    ever lived on stock records) is kept as an option and stays selected, so it
+                    stays visible instead of silently being cleared on save. */}
+                {tonerTypeOptions.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+              {tonerTypes.length === 0 && (
+                <p className="text-sm text-red-500 mt-1">
                   No toner types available. Add one from the Toners page first.
                 </p>
               )}
