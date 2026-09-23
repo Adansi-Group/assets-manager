@@ -79,11 +79,19 @@ export function planMigration({
   const warnings: MigrationWarning[] = [];
   const droppedKeys = new Set(dropped);
   const byKey = new Map<string, PlannedPool>();
+  // A pool's initialQuantity is only meaningful as a denominator when every
+  // source record that fed it had one. One record with no initialQuantity
+  // makes the whole pool's initialQuantity unknown, not partially known.
+  const initialQuantityMissing = new Set<string>();
 
   for (const record of oldStock) {
     const tonerType = resolveAlias(record.tonerType, aliases);
     const key = poolKey(tonerType, record.colorType);
     if (droppedKeys.has(key)) continue;
+
+    if (record.initialQuantity === undefined) {
+      initialQuantityMissing.add(key);
+    }
 
     const existing = byKey.get(key);
     if (existing) {
@@ -108,6 +116,12 @@ export function planMigration({
   }
 
   const pools = [...byKey.values()];
+
+  for (const pool of pools) {
+    if (initialQuantityMissing.has(poolKey(pool.tonerType, pool.colorType))) {
+      pool.initialQuantity = undefined;
+    }
+  }
 
   for (const pool of pools) {
     if (

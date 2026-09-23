@@ -103,6 +103,19 @@ describe("planMigration", () => {
     expect(plan.pools[0].initialQuantity).toBe(10);
   });
 
+  it("reports no initial quantity when any merged record is missing one", () => {
+    const plan = planMigration({
+      oldStock: [
+        stock({ id: "a", tonerType: "222A", colorType: "Black", quantity: 1, initialQuantity: 4 }),
+        stock({ id: "b", tonerType: "222A", colorType: "Black", quantity: 2 }),
+      ],
+      printers: [],
+    });
+
+    expect(plan.pools[0].quantity).toBe(3);
+    expect(plan.pools[0].initialQuantity).toBeUndefined();
+  });
+
   it("keeps the earliest dateBrought of a merged pool", () => {
     const plan = planMigration({
       oldStock: [
