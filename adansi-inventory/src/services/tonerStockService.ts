@@ -43,13 +43,31 @@ export async function addTonerStock(pool: Omit<TonerStock, "id">): Promise<strin
       `${pool.colorType} ${pool.tonerType} already has a stock record. Edit that one instead.`
     );
   }
-  const ref = await addDoc(collection(db, TONER_STOCK_COLLECTION), pool);
+  // Remove undefined fields (Firebase doesn't accept undefined values)
+  const cleanPool: Record<string, unknown> = {};
+  Object.keys(pool).forEach((key) => {
+    const value = (pool as Record<string, unknown>)[key];
+    if (value !== undefined) {
+      cleanPool[key] = value;
+    }
+  });
+
+  const ref = await addDoc(collection(db, TONER_STOCK_COLLECTION), cleanPool);
   return ref.id;
 }
 
 export async function updateTonerStock(pool: TonerStock): Promise<void> {
   const { id, status: _status, ...data } = pool;
-  await updateDoc(doc(db, TONER_STOCK_COLLECTION, id), data);
+  // Remove undefined fields (Firebase doesn't accept undefined values)
+  const cleanData: Record<string, unknown> = {};
+  Object.keys(data).forEach((key) => {
+    const value = (data as Record<string, unknown>)[key];
+    if (value !== undefined) {
+      cleanData[key] = value;
+    }
+  });
+
+  await updateDoc(doc(db, TONER_STOCK_COLLECTION, id), cleanData);
 }
 
 export async function deleteTonerStock(id: string): Promise<void> {
