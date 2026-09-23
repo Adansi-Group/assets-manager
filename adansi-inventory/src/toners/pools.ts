@@ -22,7 +22,11 @@ export type PoolLike = { tonerType: string; colorType: string };
 
 /** The address of a pool: what cartridge, what colour. */
 export function poolKey(tonerType: string, colorType: string): string {
-  return `${normalizeType(tonerType)}|${normalizeType(colorType)}`;
+  // Percent-encoded, so a "|" inside a cartridge name cannot shift the
+  // boundary and make two different cartridges look like one pool.
+  return [tonerType, colorType]
+    .map((part) => encodeURIComponent(normalizeType(part)))
+    .join("|");
 }
 
 /** The pool a cartridge and colour name, if it exists. */

@@ -20,6 +20,10 @@ describe("poolKey", () => {
   it("separates cartridges of the same colour", () => {
     expect(poolKey("222A", "Magenta")).not.toBe(poolKey("207A", "Magenta"));
   });
+
+  it("cannot collide when a cartridge name contains the separator", () => {
+    expect(poolKey("A|B", "C")).not.toBe(poolKey("A", "B|C"));
+  });
 });
 
 describe("findPool", () => {
