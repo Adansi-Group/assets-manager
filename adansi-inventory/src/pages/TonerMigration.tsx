@@ -65,6 +65,56 @@ function distinctNames(values: string[]): string[] {
   return [...seen.values()].sort((a, b) => a.localeCompare(b));
 }
 
+/**
+ * What actually landed when apply stopped part way.
+ *
+ * Kept as numbers rather than a formatted string because the panel, the Swal
+ * and the recovery advice all have to agree about the same two phases, and
+ * because the user is being told what happened to their live data.
+ */
+type Failure = {
+  phase: "pools" | "printers";
+  written: number;
+  totalPools: number;
+  assigned: number;
+  totalPrinters: number;
+  detail: string;
+};
+
+/**
+ * An honest account of a partial migration, in the order a stranded person
+ * needs it: what landed, what the error said, the likely cause, what to do now.
+ */
+function failureParagraphs(failure: Failure): string[] {
+  const { phase, written, totalPools, assigned, totalPrinters, detail } = failure;
+
+  const landed =
+    phase === "pools"
+      ? `${written} of ${totalPools} stock ${totalPools === 1 ? "pool" : "pools"} ` +
+        `${written === 1 ? "was" : "were"} created before this stopped. ` +
+        `No printer assignments were saved.`
+      : `All ${totalPools} stock ${totalPools === 1 ? "pool was" : "pools were"} created. ` +
+        `${assigned} of ${totalPrinters} ${totalPrinters === 1 ? "printer" : "printers"} ` +
+        `had their cartridge saved.`;
+
+  const nextStep =
+    phase === "pools"
+      ? `Reload this page. The already-run guard will show you exactly which pools exist, and ` +
+        `a pool that was written cannot be created again.`
+      : `You do not need to run this screen again, and cannot — the already-run guard will ` +
+        `refuse now that the pools exist. The remaining ` +
+        `${totalPrinters - assigned} ${totalPrinters - assigned === 1 ? "printer" : "printers"} ` +
+        `can have their Toner Type set one at a time on the Printers page, using Edit.`;
+
+  return [
+    landed,
+    `The error was: ${detail}`,
+    `If that is a permissions error, the toner_stock collection needs a rule in the Firebase ` +
+      `console before the migration can write.`,
+    nextStep,
+  ];
+}
+
 export default function TonerMigration() {
   const navigate = useNavigate();
 
@@ -85,7 +135,10 @@ export default function TonerMigration() {
 
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [failure, setFailure] = useState<string | null>(null);
+  // Terminal for this mount: once set it is never cleared, so the apply button
+  // cannot restart a half-finished migration and then report `written = 0`
+  // while pools are sitting in the database.
+  const [failure, setFailure] = useState<Failure | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -207,6 +260,11 @@ export default function TonerMigration() {
   }
 
   async function apply() {
+    // A stop is terminal. Restarting would begin at pool #1, be refused by
+    // addTonerStock for the pools that already exist, and then report that
+    // nothing was written — the exact opposite of the truth.
+    if (failure || busy) return;
+
     const confirmation = await Swal.fire({
       title: "Write the pooled stock?",
       html: `
@@ -224,7 +282,6 @@ export default function TonerMigration() {
     });
     if (!confirmation.isConfirmed) return;
 
-    setFailure(null);
     setBusy(true);
     setProgress(0);
 
@@ -264,23 +321,24 @@ export default function TonerMigration() {
         } assigned.`,
       });
     } catch (error) {
-      // Stop where it failed. Pools already written stay written; re-running is
-      // blocked by the already-run guard, so recovery is manual and the user
-      // needs to know exactly how far it got.
-      const where =
-        written < plan.pools.length
-          ? `Stopped after ${written} of ${plan.pools.length} pools.`
-          : `All ${plan.pools.length} ${plan.pools.length === 1 ? "pool was" : "pools were"} ` +
-            `written, then stopped after ${assigned} of ${entries.length} printer assignments.`;
+      // Stop where it failed, and stop for good. Whatever was written stays
+      // written, a second run is refused by the already-run guard, so all this
+      // screen can still do is give an exact account of what landed.
+      const stopped: Failure = {
+        phase: written < plan.pools.length ? "pools" : "printers",
+        written,
+        totalPools: plan.pools.length,
+        assigned,
+        totalPrinters: entries.length,
+        detail: (error as Error).message,
+      };
 
-      const message =
-        `${where} ${(error as Error).message}. ` +
-        `If this is a permissions error, the toner_stock collection needs a rule in the ` +
-        `Firebase console before the migration can write. Whatever was written stays written, ` +
-        `and the already-run guard will refuse a second run, so the rest has to be finished by hand.`;
-
-      setFailure(message);
-      Swal.fire({ icon: "error", title: "Migration stopped", text: message });
+      setFailure(stopped);
+      Swal.fire({
+        icon: "error",
+        title: "Migration stopped",
+        text: failureParagraphs(stopped).join(" "),
+      });
     } finally {
       setBusy(false);
     }
@@ -400,8 +458,14 @@ export default function TonerMigration() {
 
       {failure && (
         <Panel tone="red" icon={<AlertTriangle className="text-red-600 dark:text-red-400" size={22} />}>
-          <p className="font-bold text-red-800 dark:text-red-300">The migration stopped part way.</p>
-          <p className="text-sm text-red-700 dark:text-red-400 mt-1">{failure}</p>
+          <p className="font-bold text-red-800 dark:text-red-300">
+            The migration stopped part way. This is what landed:
+          </p>
+          {failureParagraphs(failure).map((line) => (
+            <p key={line} className="text-sm text-red-700 dark:text-red-400 mt-2">
+              {line}
+            </p>
+          ))}
         </Panel>
       )}
 
@@ -821,7 +885,7 @@ export default function TonerMigration() {
             <div className="flex justify-between">
               <button
                 onClick={() => setStage("merge")}
-                disabled={busy}
+                disabled={busy || failure !== null}
                 className="border border-gray-300 dark:border-gray-600 px-5 py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-white flex items-center gap-2 disabled:opacity-50"
               >
                 <ArrowLeft size={18} />
@@ -829,10 +893,15 @@ export default function TonerMigration() {
               </button>
               <button
                 onClick={apply}
-                disabled={busy || plan.pools.length === 0}
+                disabled={busy || failure !== null || plan.pools.length === 0}
+                title={
+                  failure
+                    ? "The migration stopped part way and cannot be restarted from here"
+                    : undefined
+                }
                 className="bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
               >
-                {busy ? "Migrating..." : "Migrate now"}
+                {failure ? "Migration stopped" : busy ? "Migrating..." : "Migrate now"}
               </button>
             </div>
           </div>
