@@ -410,15 +410,44 @@ export default function TonerMigration() {
     );
   }
 
+  // Printers load the same way stock does — getPrinters() also swallows its
+  // own errors and returns []. An empty table here would leave the assign
+  // stage with nothing to assign, which empties `unassigned`, which enables
+  // Next, which lets Apply write every pool with zero printer assignments —
+  // and the already-run guard then locks the screen before it can be fixed
+  // from here. So, like a failed stock read, this refuses to start.
+  if (printers.length === 0) {
+    return (
+      <Shell>
+        <Panel tone="red" icon={<ShieldAlert className="text-red-600 dark:text-red-400" size={22} />}>
+          <p className="font-bold text-red-800 dark:text-red-300">
+            No printers could be loaded, so the migration cannot run.
+          </p>
+          <p className="text-sm text-red-700 dark:text-red-400 mt-1">
+            This usually means the printer read failed, not that there are genuinely no printers.
+            Running the migration without any printers would write every stock pool with zero
+            printer assignments, and the already-run guard would then lock the screen before that
+            could be fixed here.
+          </p>
+          <p className="text-sm text-red-700 dark:text-red-400 mt-2">
+            Reload this page. If it still shows no printers, check that the{" "}
+            <span className="font-mono">printers</span> collection can be read before trying again.
+          </p>
+        </Panel>
+      </Shell>
+    );
+  }
+
   if (oldStock.length === 0) {
     return (
       <Shell>
         <Panel tone="amber" icon={<AlertTriangle className="text-amber-600 dark:text-amber-400" size={22} />}>
           <p className="font-bold text-amber-800 dark:text-amber-300">
-            There are no toner records to migrate.
+            No toner records were found.
           </p>
           <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
-            Add stock on the Toners page first.
+            If records are expected, this may mean the read failed rather than that there are
+            genuinely none. Otherwise, add stock on the Toners page first.
           </p>
         </Panel>
       </Shell>
