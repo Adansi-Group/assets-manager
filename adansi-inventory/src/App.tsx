@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Printers from "./pages/Printers";
 import Toners from "./pages/Toners";
+import TonerMigration from "./pages/TonerMigration";
 import AdminLayout from "./Layouts/AdminLayout";
 import Gadgets from './pages/Gadgets';
 import Laptops from './pages/gadgets/Laptops';
@@ -112,6 +113,7 @@ export default function App() {
               <Route path="/toners/add" element={<Toners />} />
               <Route path="/toners/replace" element={<Toners />} />
               <Route path="/toners/history" element={<ReplacementHistory />} />
+              <Route path="toners/migrate" element={<TonerMigration />} />
             </>
           )}
 

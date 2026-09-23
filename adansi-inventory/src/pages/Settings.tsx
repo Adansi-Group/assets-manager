@@ -10,6 +10,7 @@
 
 
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { DEFAULT_TONER_REORDER_LEVEL } from "../toners/stockLevel";
 import { auth } from "../firebase/firebase";
 import {
@@ -20,9 +21,10 @@ import {
 import { Bell, Mail, MessageSquare, Trash2, User, Save, X, Plus } from "lucide-react";
 import Swal from "sweetalert2";
 import { migrateLocationNames } from '../services/locationMigration';
-import { Droplets, Smartphone, Wifi, FileText, AlertCircle } from "lucide-react";
+import { Droplets, Smartphone, Wifi, FileText, AlertCircle, Layers } from "lucide-react";
 
 export default function Settings() {
+  const navigate = useNavigate();
   const [settings, setSettings] = useState<NotificationSettings>({
     emailEnabled: false,
     smsEnabled: false,
@@ -605,6 +607,32 @@ export default function Settings() {
           >
             <Save size={18} />
             Save Settings
+          </button>
+        </div>
+
+        {/* Toner stock consolidation */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+              <Layers className="text-purple-600" size={20} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                Consolidate toner stock
+              </h2>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                Combine per-printer toner records into one shared set per cartridge. Preview before
+                anything is saved.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => navigate("/toners/migrate")}
+            className="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2"
+          >
+            <Layers size={18} />
+            Open consolidation
           </button>
         </div>
 
