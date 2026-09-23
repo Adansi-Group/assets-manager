@@ -113,7 +113,6 @@ export default function App() {
               <Route path="/toners/add" element={<Toners />} />
               <Route path="/toners/replace" element={<Toners />} />
               <Route path="/toners/history" element={<ReplacementHistory />} />
-              <Route path="toners/migrate" element={<TonerMigration />} />
             </>
           )}
 
@@ -178,7 +177,13 @@ export default function App() {
 
           {/* SETTINGS */}
           {canAccess("manage_settings") && (
-            <Route path="/settings" element={<Settings />} />
+            <>
+              <Route path="/settings" element={<Settings />} />
+              {/* A one-time structural migration that rewrites all stock and
+                  every printer record: an admin operation, guarded like the
+                  Settings page that launches it, not like the Toners pages. */}
+              <Route path="toners/migrate" element={<TonerMigration />} />
+            </>
           )}
 
           {/* PROFILE */}
