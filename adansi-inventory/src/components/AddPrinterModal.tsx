@@ -17,6 +17,7 @@ import {
   getAllAccessories,
   addCustomAccessory,
 } from "../services/printerOptionsService";
+import { getAllTonerTypes } from "../services/tonerService";
 
 type Props = {
   onClose: () => void;
@@ -27,6 +28,8 @@ type Props = {
 export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
   const [location, setLocation] = useState(() => printer?.location ?? "");
   const [room, setRoom] = useState(() => printer?.room ?? ""); // NEW: Room/office field
+  const [tonerType, setTonerType] = useState(() => printer?.tonerType ?? "");
+  const [tonerTypes, setTonerTypes] = useState<string[]>([]);
   const [model, setModel] = useState(() => printer?.model ?? "");
   const [printerColorType, setPrinterColorType] = useState<PrinterColor | "">(() => printer?.printerColorType ?? "");
   const [quantity, setQuantity] = useState(() => printer?.quantity ?? 1);
@@ -65,6 +68,11 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
       setAvailableAccessories(accessories);
     }
     loadOptions();
+  }, []);
+
+  // Load toner cartridge types on mount
+  useEffect(() => {
+    (async () => setTonerTypes(await getAllTonerTypes()))();
   }, []);
 
   async function handleAddCustomLocation() {
@@ -122,6 +130,7 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
     const printerData: Omit<Printer, "id"> & { id?: string } = {
       location,
       room: room.trim() || undefined, // NEW: Only save if not empty
+      tonerType: tonerType.trim() || undefined,
       model,
       printerColorType: printerColorType as PrinterColor,
       quantity,
@@ -224,6 +233,35 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
                 placeholder="e.g., CEO's Office, Reception, First Floor"
                 className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-green-500 focus:outline-none"
               />
+            </div>
+
+            {/* Toner Type — what cartridge this printer takes */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Toner Type <span className="text-red-500">*</span>
+              </label>
+              {tonerTypes.length > 0 ? (
+                <select
+                  value={tonerType}
+                  onChange={(e) => setTonerType(e.target.value)}
+                  required
+                  className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                >
+                  <option value="">Select the cartridge this printer takes</option>
+                  {tonerTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-red-500">
+                  No toner types available. Add one from the Toners page first.
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                Stock is shared by every printer taking the same cartridge.
+              </p>
             </div>
 
             {/* Model */}

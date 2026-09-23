@@ -21,6 +21,12 @@ export interface Printer {
   id: string;
   location: string;
   room?: string; // Optional room/office within location
+  /**
+   * The cartridge this printer takes, e.g. "222A". Optional so existing
+   * documents load; required by the Add/Edit Printer form from now on.
+   * Replacement resolves stock by this plus a colour.
+   */
+  tonerType?: string;
   model: string;
   printerColorType: PrinterColor;
   quantity: number;
