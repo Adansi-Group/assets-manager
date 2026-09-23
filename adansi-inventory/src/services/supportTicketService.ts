@@ -49,7 +49,7 @@ export async function addSupportTicket(ticket: Omit<SupportTicket, "id" | "ticke
   try {
     const ticketNumber = await generateTicketNumber();
     
-    const cleanTicket: any = {
+    const cleanTicket: Record<string, unknown> = {
       ticketNumber,
       staffName: ticket.staffName.trim(),
       category: ticket.category,
@@ -80,9 +80,9 @@ export async function addSupportTicket(ticket: Omit<SupportTicket, "id" | "ticke
 
     await addDoc(collection(db, COLLECTION), cleanTicket);
     console.log("✅ Support ticket added successfully");
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ Error adding support ticket:", error);
-    throw new Error(`Failed to add support ticket: ${error.message}`);
+    throw new Error(`Failed to add support ticket: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -91,10 +91,10 @@ export async function updateSupportTicket(ticket: SupportTicket): Promise<void> 
   try {
     const { id, createdAt, ticketNumber, ...payload } = ticket;
     
-    const updatePayload: any = {};
-    
+    const updatePayload: Record<string, unknown> = {};
+
     Object.keys(payload).forEach((key) => {
-      const value = (payload as any)[key];
+      const value = (payload as Record<string, unknown>)[key];
       
       if (value === undefined) {
         updatePayload[key] = deleteField();
@@ -107,9 +107,9 @@ export async function updateSupportTicket(ticket: SupportTicket): Promise<void> 
     
     await updateDoc(doc(db, COLLECTION, id), updatePayload);
     console.log("✅ Support ticket updated successfully");
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ Error updating support ticket:", error);
-    throw new Error(`Failed to update support ticket: ${error.message}`);
+    throw new Error(`Failed to update support ticket: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

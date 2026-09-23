@@ -10,6 +10,7 @@
 
 
 import { useState, useEffect } from "react";
+import { DEFAULT_TONER_REORDER_LEVEL } from "../toners/stockLevel";
 import { auth } from "../firebase/firebase";
 import {
   getNotificationSettings,
@@ -19,7 +20,7 @@ import {
 import { Bell, Mail, MessageSquare, Trash2, User, Save, X, Plus } from "lucide-react";
 import Swal from "sweetalert2";
 import { migrateLocationNames } from '../services/locationMigration';
-import { Droplets, Smartphone, Wifi, FileText, AlertCircle, CheckCircle } from "lucide-react";
+import { Droplets, Smartphone, Wifi, FileText, AlertCircle } from "lucide-react";
 
 export default function Settings() {
   const [settings, setSettings] = useState<NotificationSettings>({
@@ -29,6 +30,7 @@ export default function Settings() {
     phoneNumbers: [],
     thresholds: {
       toner: 20,
+      tonerUnits: DEFAULT_TONER_REORDER_LEVEL,
       gadget: 5,
       internet: 7,
       a4Sheet: 10,
@@ -81,14 +83,6 @@ export default function Settings() {
     return false;
   }
 
-  useEffect(() => {
-    loadSettings();
-    const user = auth.currentUser;
-    if (user?.email) {
-      setUserEmail(user.email);
-    }
-  }, []);
-
   async function loadSettings() {
     setLoading(true);
     const data = await getNotificationSettings();
@@ -106,6 +100,16 @@ export default function Settings() {
     }
     setLoading(false);
   }
+
+  useEffect(() => {
+    (async () => {
+      await loadSettings();
+      const user = auth.currentUser;
+      if (user?.email) {
+        setUserEmail(user.email);
+      }
+    })();
+  }, []);
 
   function addEmail() {
     const trimmed = emailInput.trim();
@@ -505,24 +509,28 @@ export default function Settings() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                    Toner Level (%)
+                    Toner reorder level (cartridges)
                   </label>
                   <input
                     type="number"
                     min="0"
-                    max="100"
-                    value={settings.thresholds.toner}
+                    step="1"
+                    value={settings.thresholds.tonerUnits}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
                         thresholds: {
                           ...settings.thresholds,
-                          toner: Number(e.target.value),
+                          tonerUnits: Number(e.target.value),
                         },
                       })
                     }
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Any toner at or below this many cartridges is flagged for reordering. Set 0 to be
+                    warned only once a toner is empty.
+                  </p>
                 </div>
 
                 <div>

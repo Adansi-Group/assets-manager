@@ -1,7 +1,6 @@
 // src/pages/Users.tsx
 
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { db, auth } from "../firebase/firebase";
@@ -12,7 +11,6 @@ import Swal from "sweetalert2";
 export default function Users() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
 
   useEffect(() => {
     loadUsers();
@@ -137,12 +135,12 @@ export default function Users() {
           timer: 3000,
           showConfirmButton: true,
         });
-      } catch (error: any) {
+      } catch (error) {
         console.error("Error creating user:", error);
         Swal.fire({
           icon: "error",
           title: "Creation Failed",
-          text: error.message || "Failed to create user",
+          text: error instanceof Error ? error.message : "Failed to create user",
         });
       }
     }

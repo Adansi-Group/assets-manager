@@ -5,7 +5,7 @@
 
 
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Swal from "sweetalert2";
 import AddInternetUsageModal from "../components/AddInternetModal";
 import type { InternetUsage } from "../types/InternetUsage";
@@ -16,7 +16,7 @@ import {
   deleteInternetUsage,
   getInternetUsageStats,
 } from "../services/internetUsageService";
-import { Download, Wifi, AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { Download, Wifi, AlertCircle, CheckCircle } from "lucide-react";
 import { checkAndNotifyInternetExpiration } from "../utils/notificationsHelper";
 
 const ITEMS_PER_PAGE = 10;
@@ -64,7 +64,9 @@ export default function InternetUsage() {
   }
 
   useEffect(() => {
-    loadRecords();
+    (async () => {
+      await loadRecords();
+    })();
   }, []);
 
   async function handleSave(usage: InternetUsage | Omit<InternetUsage, "id" | "status" | "createdAt">) {
@@ -343,7 +345,7 @@ export default function InternetUsage() {
 
 /* COMPONENTS */
 
-function Card({ title, value, color = "", icon }: any) {
+function Card({ title, value, color = "", icon }: { title: string; value: string | number; color?: string; icon?: ReactNode }) {
   return (
     <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow border border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-2">

@@ -3,6 +3,7 @@
 
 
 import { useEffect, useState } from "react";
+import { FirebaseError } from "firebase/app";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../firebase/firebase";
 import { updateProfile, updatePassword } from "firebase/auth";
@@ -45,11 +46,11 @@ export default function Profile() {
       });
 
       setUser(auth.currentUser);
-    } catch (error: any) {
+    } catch (error) {
       Swal.fire({
         icon: "error",
         title: "Update Failed",
-        text: error.message,
+        text: error instanceof Error ? error.message : String(error),
       });
     } finally {
       setLoading(false);
@@ -91,8 +92,8 @@ export default function Profile() {
 
       setNewPassword("");
       setConfirmPassword("");
-    } catch (error: any) {
-      if (error.code === "auth/requires-recent-login") {
+    } catch (error) {
+      if (error instanceof FirebaseError && error.code === "auth/requires-recent-login") {
         Swal.fire({
           icon: "error",
           title: "Re-authentication Required",
@@ -102,7 +103,7 @@ export default function Profile() {
         Swal.fire({
           icon: "error",
           title: "Update Failed",
-          text: error.message,
+          text: error instanceof Error ? error.message : String(error),
         });
       }
     } finally {

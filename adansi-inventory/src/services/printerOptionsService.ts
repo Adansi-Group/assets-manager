@@ -12,7 +12,6 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
   getDocs,
   query,
 } from "firebase/firestore";

@@ -2,18 +2,16 @@
 
 
 
+import type { ReactNode } from "react";
 import { useState, useEffect } from "react";
 import { Download, FileText, TrendingDown, DollarSign, AlertTriangle } from "lucide-react";
-import { getA4Sheets, getA4SheetStats } from "../services/a4SheetService";
+import { getA4Sheets } from "../services/a4SheetService";
+import type { A4Sheet } from "../types/A4Sheet";
 
 export default function A4SheetReports() {
-  const [sheets, setSheets] = useState<any[]>([]);
+  const [sheets, setSheets] = useState<A4Sheet[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState("month");
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   async function loadData() {
     setLoading(true);
@@ -21,6 +19,12 @@ export default function A4SheetReports() {
     setSheets(data);
     setLoading(false);
   }
+
+  useEffect(() => {
+    (async () => {
+      await loadData();
+    })();
+  }, []);
 
   // Calculate statistics
   const stats = {
@@ -359,7 +363,14 @@ export default function A4SheetReports() {
   );
 }
 
-function StatCard({ title, value, icon, color }: any) {
+interface StatCardProps {
+  title: string;
+  value: number | string;
+  icon: ReactNode;
+  color: string;
+}
+
+function StatCard({ title, value, icon, color }: StatCardProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
       <div className="flex items-center justify-between">

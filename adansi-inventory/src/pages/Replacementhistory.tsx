@@ -9,16 +9,18 @@ export default function ReplacementHistory() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    loadReplacements();
-  }, []);
-
   async function loadReplacements() {
     setLoading(true);
     const data = await getAllReplacements();
     setReplacements(data);
     setLoading(false);
   }
+
+  useEffect(() => {
+    (async () => {
+      await loadReplacements();
+    })();
+  }, []);
 
   async function handleDelete(id: string, location: string, printerType: string, color: string) {
     const result = await Swal.fire({

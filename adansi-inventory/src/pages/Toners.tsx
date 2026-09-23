@@ -11,6 +11,12 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import AddTonerModal from "../components/AddTonerModal";
 import type { Toner } from "../types/toner";
+import { lowToners } from "../toners/stockLevel";
+import { groupToners, selectedRecord, type GroupedToner } from "../toners/grouping";
+import { unlinkedStock } from "../toners/stockMatching";
+import { getPrinters } from "../services/printerService";
+import type { Printer } from "../types/printer";
+import { getTonerReorderLevel } from "../services/notificationService";
 import {
   getToners,
   addToner,
@@ -18,7 +24,7 @@ import {
   deleteToner,
 } from "../services/tonerService";
 import Swal from "sweetalert2";
-import { Download, ChevronDown } from "lucide-react";
+import { AlertTriangle, Download, ChevronDown, Unlink } from "lucide-react";
 
 // Standard CMYK colors for most printers
 const STANDARD_COLORS = ["Black", "Cyan", "Magenta", "Yellow"] as const;
@@ -37,41 +43,14 @@ function getAvailableColors(printerType: string): readonly string[] {
   return STANDARD_COLORS;
 }
 
-// ✅ ADD THIS: Function to calculate status
-function calculateStatus(currentQty: number, initialQty: number): "Good" | "Warning" | "Critical" {
-  if (initialQty === 0) return "Good";
-  const percentage = (currentQty / initialQty) * 100;
-  if (percentage <= 20) return "Critical";
-  else if (percentage <= 50) return "Warning";
-  else return "Good";
-}
-
-// Grouped toner with selected color
-type GroupedToner = {
-  id: string;
-  location: string;
-  room?: string;
-  printerType: string;
-  tonerType: string;
-  colors: {
-    Black?: number;
-    Cyan?: number;
-    Magenta?: number;
-    Yellow?: number;
-    Color?: number;
-  };
-  colorRecords: Record<string, Toner>;
-  dateBrought: string;
-  status?: string;
-  selectedColor: string;
-};
-
 export default function Toners() {
   const [toners, setToners] = useState<Toner[]>([]);
+  const [printers, setPrinters] = useState<Printer[]>([]);
   const [editing, setEditing] = useState<Toner | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectedColors, setSelectedColors] = useState<Record<string, string>>({});
+  const [reorderLevel, setReorderLevel] = useState<number | null>(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -80,51 +59,22 @@ export default function Toners() {
 
   async function loadToners() {
     setLoading(true);
-    const data = await getToners();
+    const [data, level, printerList] = await Promise.all([
+      getToners(),
+      getTonerReorderLevel(),
+      getPrinters(),
+    ]);
     setToners(data);
+    setReorderLevel(level);
+    setPrinters(printerList);
     setLoading(false);
   }
 
   useEffect(() => {
-    loadToners();
+    (async () => {
+      await loadToners();
+    })();
   }, []);
-
-  // Group toners by location + printer + toner type
-  function groupToners(tonerList: Toner[]): GroupedToner[] {
-    const groups: Record<string, GroupedToner> = {};
-
-    tonerList.forEach((toner) => {
-      const key = `${toner.location}|${toner.printerType}|${toner.tonerType}`;
-
-      if (!groups[key]) {
-        groups[key] = {
-          id: toner.id,
-          location: toner.location,
-          room: toner.room,
-          printerType: toner.printerType,
-          tonerType: toner.tonerType,
-          colors: {},
-          colorRecords: {},
-          dateBrought: toner.dateBrought,
-          status: toner.status,
-          selectedColor: selectedColors[key] || toner.colorType,
-        };
-      }
-
-      groups[key].colors[toner.colorType as keyof typeof groups[typeof key]['colors']] = toner.quantity;
-      groups[key].colorRecords[toner.colorType] = toner;
-
-      if (toner.status === "Critical") {
-        groups[key].status = "Critical";
-      } else if (toner.status === "Warning" && groups[key].status !== "Critical") {
-        groups[key].status = "Warning";
-      } else if (!groups[key].status) {
-        groups[key].status = toner.status;
-      }
-    });
-
-    return Object.values(groups);
-  }
 
   async function handleColorSelect(group: GroupedToner) {
     const availableColors = getAvailableColors(group.printerType);
@@ -170,10 +120,9 @@ export default function Toners() {
             const color = div.getAttribute('data-color');
             if (color) {
               Swal.close();
-              const key = `${group.location}|${group.printerType}|${group.tonerType}`;
               setSelectedColors(prev => ({
                 ...prev,
-                [key]: color
+                [group.key]: color
               }));
             }
           });
@@ -257,7 +206,6 @@ export default function Toners() {
         const updatedToner: Toner = {
           ...existingRecord,
           quantity: result.value,
-          status: calculateStatus(result.value, existingRecord.initialQuantity || result.value), // ✅ FIXED: Use current value if initialQuantity is missing
           lastCheckedDate: new Date().toISOString().split("T")[0],
         };
         await updateToner(updatedToner);
@@ -355,7 +303,7 @@ export default function Toners() {
     a.click();
   }
 
-  const groupedToners = groupToners(toners);
+  const groupedToners = groupToners(toners, selectedColors);
 
   const filtered = groupedToners.filter((g) =>
     `${g.location} ${g.room || ''} ${g.printerType} ${g.tonerType}`
@@ -363,12 +311,17 @@ export default function Toners() {
       .includes(search.toLowerCase())
   );
 
+  // Individual records, not groups: a group is one printer's set of colours, and
+  // the reorder decision is per cartridge.
+  const needsReorder = reorderLevel === null ? [] : lowToners(toners, reorderLevel);
+
+  // Stock pointing at a printer that does not exist. Invisible until someone
+  // tries to replace a cartridge, so it is worth saying out loud.
+  const unlinked = unlinkedStock(toners, printers);
+
   const critical = groupedToners.filter((g) => g.status === "Critical").length;
   const warning = groupedToners.filter((g) => g.status === "Warning").length;
   const good = groupedToners.filter((g) => g.status === "Good").length;
-
-  // Calculate total quantity for display
-  const totalQuantity = toners.reduce((sum, t) => sum + t.quantity, 0);
 
   if (loading) {
     return (
@@ -392,6 +345,100 @@ export default function Toners() {
       </div>
 
       
+
+      {unlinked.length > 0 && (
+        <div
+          role="alert"
+          className="bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-500 rounded-r-lg p-5"
+        >
+          <div className="flex items-start gap-3">
+            <Unlink className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={22} />
+            <div className="flex-1">
+              <p className="font-bold text-amber-800 dark:text-amber-300">
+                {unlinked.length} stock {unlinked.length === 1 ? "record is" : "records are"} not
+                linked to any printer
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+                The location, room or model on {unlinked.length === 1 ? "it" : "them"} matches no
+                printer on the Printers page, so a replacement will report the stock as missing.
+                Edit {unlinked.length === 1 ? "it" : "each one"} to match the printer exactly.
+              </p>
+
+              <ul className="mt-3 space-y-2">
+                {unlinked.map(({ toner, candidates }) => (
+                  <li
+                    key={toner.id}
+                    className="text-sm bg-white/60 dark:bg-gray-900/40 rounded p-3"
+                  >
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {toner.colorType} {toner.tonerType}
+                    </span>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {" "}&mdash; {toner.location}
+                      {toner.room ? ` (${toner.room})` : " (no room)"} &middot;{" "}
+                      {toner.printerType}
+                    </span>
+
+                    {candidates.length > 0 ? (
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        Closest printer differs by {candidates[0].differs}, recorded as{" "}
+                        <span className="font-mono text-gray-900 dark:text-white">
+                          {candidates[0].differs === "model"
+                            ? candidates[0].printer.model
+                            : candidates[0].differs === "room"
+                              ? candidates[0].printer.room || "no room"
+                              : candidates[0].printer.location}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        No printer is close enough to suggest &mdash; check the Printers page.
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {needsReorder.length > 0 && (
+        <div
+          role="alert"
+          className="bg-red-50 dark:bg-red-950/40 border-l-4 border-red-500 rounded-r-lg p-5"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" size={22} />
+            <div className="flex-1">
+              <p className="font-bold text-red-800 dark:text-red-300">
+                {needsReorder.length} {needsReorder.length === 1 ? "toner needs" : "toners need"}{" "}
+                reordering
+              </p>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-0.5">
+                At or below the reorder level of {reorderLevel}{" "}
+                {reorderLevel === 1 ? "cartridge" : "cartridges"}. Change this in Settings.
+              </p>
+              <ul className="mt-3 space-y-1">
+                {needsReorder.map((t) => (
+                  <li key={t.id} className="text-sm text-red-900 dark:text-red-200">
+                    <span className="font-semibold">
+                      {t.colorType} {t.tonerType}
+                    </span>{" "}
+                    at {t.location}
+                    {t.room ? ` (${t.room})` : ""} —{" "}
+                    <span className="font-semibold">
+                      {t.quantity === 0
+                        ? "none left"
+                        : `${t.quantity} ${t.quantity === 1 ? "cartridge" : "cartridges"} left`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ACTION BAR */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -506,8 +553,9 @@ export default function Toners() {
                   <td className="px-4 py-3 space-x-3 whitespace-nowrap">
                     <button
                       onClick={() => {
-                        const firstRecord = Object.values(group.colorRecords)[0];
-                        setEditing(firstRecord);
+                        const record = selectedRecord(group);
+                        if (!record) return;
+                        setEditing(record);
                         navigate("/toners/add");
                       }}
                       className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
@@ -561,7 +609,7 @@ function getColorTextClass(color: string): string {
   return classes[color] || "text-gray-600 dark:text-gray-400";
 }
 
-function Stat({ title, value, color = "" }: any) {
+function Stat({ title, value, color = "" }: { title: string; value: string | number; color?: string }) {
   return (
     <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow border border-gray-200 dark:border-gray-700">
       <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>

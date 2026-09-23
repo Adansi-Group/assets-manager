@@ -2,3 +2,14 @@
 node_modules/
 dist/
 .env
+
+# macOS
+.DS_Store
+
+# Tool scratch
+.playwright-mcp/
+.superpowers/
+
+# Stray screenshots
+*.png
+*.jpeg

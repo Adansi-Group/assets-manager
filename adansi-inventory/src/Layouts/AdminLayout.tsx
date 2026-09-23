@@ -5,12 +5,12 @@
 
 
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import NotificationsDropdown from "../components/NotificationsDropdown";
 import ThemeSwitcher from "../components/ThemeSwitcher";
 import { auth } from "../firebase/firebase";
 import { logout } from "../services/authService";
-import type { User } from "../types/users";
+import type { User, Permission } from "../types/users";
 import { hasPermission } from "../types/users";
 import Swal from "sweetalert2";
 
@@ -39,46 +39,25 @@ export default function AdminLayout({ currentUser }: Props) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
-  const [tonerOpen, setTonerOpen] = useState(false);
-  const [gadgetsOpen, setGadgetsOpen] = useState(false);
-  const [inventoryOpen, setInventoryOpen] = useState(false); // NEW!
+  const [tonerOpen, setTonerOpen] = useState(() => pathname.startsWith("/toners"));
+  const [gadgetsOpen, setGadgetsOpen] = useState(() => pathname.startsWith("/gadgets"));
+  const [inventoryOpen, setInventoryOpen] = useState(() => pathname.startsWith("/inventory")); // NEW!
 
   const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [userInitials, setUserInitials] = useState("A");
-  const [userPhoto, setUserPhoto] = useState<string | null>(null);
+  const userPhoto = auth.currentUser?.photoURL ?? null;
+  const userInitials = (
+    auth.currentUser?.displayName?.trim()[0] ??
+    auth.currentUser?.email?.[0] ??
+    "A"
+  ).toUpperCase();
+  const unreadCount = (() => {
+    const stored = JSON.parse(localStorage.getItem("notifications") || "[]") as Array<{ read?: boolean }>;
+    return stored.filter((n) => !n.read).length;
+  })();
 
-  useEffect(() => {
-    const stored = JSON.parse(
-      localStorage.getItem("notifications") || "[]"
-    );
-    setUnreadCount(stored.filter((n: any) => !n.read).length);
-  }, [showNotifications]);
-
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (user) {
-      const displayName = user.displayName || "";
-      const email = user.email || "";
-      
-      if (user.photoURL) {
-        setUserPhoto(user.photoURL);
-      }
-      
-      if (displayName && displayName.trim()) {
-        setUserInitials(displayName[0].toUpperCase());
-      } else if (email && email.length > 0) {
-        setUserInitials(email[0].toUpperCase());
-      }
-    }
-  }, []);
-
-  // Auto-open dropdowns
-  useEffect(() => {
-    if (pathname.startsWith("/toners")) setTonerOpen(true);
-    if (pathname.startsWith("/gadgets")) setGadgetsOpen(true);
-    if (pathname.startsWith("/inventory")) setInventoryOpen(true); // NEW!
-  }, [pathname]);
+  const isTonerOpen = tonerOpen || pathname.startsWith("/toners");
+  const isGadgetsOpen = gadgetsOpen || pathname.startsWith("/gadgets");
+  const isInventoryOpen = inventoryOpen || pathname.startsWith("/inventory");
 
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path + "/");
@@ -116,7 +95,7 @@ export default function AdminLayout({ currentUser }: Props) {
 
   const canAccess = (permission: string) => {
     if (!currentUser) return false;
-    return hasPermission(currentUser, permission as any);
+    return hasPermission(currentUser, permission as Permission);
   };
 
   const pageTitleMap: Record<string, string> = {
@@ -129,6 +108,7 @@ export default function AdminLayout({ currentUser }: Props) {
     "/gadgets/phones": "Smartphones",
     "/gadgets/laptops": "Laptops",
     "/gadgets/accessories": "Accessories",
+    "/gadgets/returned": "Locker Devices",
     "/profile": "My Profile",
     "/internet-usage": "Internet Usage",
     "/a4-sheets": "A4 Sheets",
@@ -144,6 +124,7 @@ export default function AdminLayout({ currentUser }: Props) {
     "/reports/gadgets": "Gadget Reports",
     "/reports/internet": "Internet Reports",
     "/reports/a4sheets": "A4 Sheet Reports",
+    "/reports/consumables": "Consumables Management Report",
     "/reports/consolidated": "Consolidated Report",
     "/users": "User Management",
     "/settings": "Settings",
@@ -204,7 +185,7 @@ export default function AdminLayout({ currentUser }: Props) {
           {canAccess("view_toners") && (
             <div>
               <button
-                onClick={() => setTonerOpen(!tonerOpen)}
+                onClick={() => setTonerOpen(!isTonerOpen)}
                 className={`flex items-center justify-between w-full px-4 py-3 rounded-lg ${
                   pathname.startsWith("/toners")
                     ? "bg-green-600 dark:bg-gray-700"
@@ -217,11 +198,11 @@ export default function AdminLayout({ currentUser }: Props) {
                 </div>
                 <ChevronDown
                   size={16}
-                  className={`transition-transform ${tonerOpen ? "rotate-180" : ""}`}
+                  className={`transition-transform ${isTonerOpen ? "rotate-180" : ""}`}
                 />
               </button>
 
-              {tonerOpen && (
+              {isTonerOpen && (
                 <div className="ml-9 mt-1 space-y-1">
                   <Link
                     to="/toners"
@@ -252,7 +233,7 @@ export default function AdminLayout({ currentUser }: Props) {
           {canAccess("view_gadgets") && (
             <div>
               <button
-                onClick={() => setGadgetsOpen(!gadgetsOpen)}
+                onClick={() => setGadgetsOpen(!isGadgetsOpen)}
                 className={`flex items-center justify-between w-full px-4 py-3 rounded-lg ${
                   pathname.startsWith("/gadgets")
                     ? "bg-green-600 dark:bg-gray-700"
@@ -265,11 +246,11 @@ export default function AdminLayout({ currentUser }: Props) {
                 </div>
                 <ChevronDown
                   size={16}
-                  className={`transition-transform ${gadgetsOpen ? "rotate-180" : ""}`}
+                  className={`transition-transform ${isGadgetsOpen ? "rotate-180" : ""}`}
                 />
               </button>
 
-              {gadgetsOpen && (
+              {isGadgetsOpen && (
                 <div className="ml-9 mt-1 space-y-1">
                   <Link
                     to="/gadgets"
@@ -311,6 +292,16 @@ export default function AdminLayout({ currentUser }: Props) {
                   >
                     Accessories
                   </Link>
+                  <Link
+                    to="/gadgets/returned"
+                    className={`block px-3 py-2 rounded text-sm ${
+                      isActive("/gadgets/returned")
+                        ? "bg-green-600 dark:bg-gray-700"
+                        : "hover:bg-green-800 dark:hover:bg-gray-700"
+                    }`}
+                  >
+                    Locker Devices
+                  </Link>
                 </div>
               )}
             </div>
@@ -350,7 +341,7 @@ export default function AdminLayout({ currentUser }: Props) {
           {canAccess("view_inventory") && (
             <div>
               <button
-                onClick={() => setInventoryOpen(!inventoryOpen)}
+                onClick={() => setInventoryOpen(!isInventoryOpen)}
                 className={`flex items-center justify-between w-full px-4 py-3 rounded-lg ${
                   pathname.startsWith("/inventory")
                     ? "bg-green-600 dark:bg-gray-700"
@@ -363,11 +354,11 @@ export default function AdminLayout({ currentUser }: Props) {
                 </div>
                 <ChevronDown
                   size={16}
-                  className={`transition-transform ${inventoryOpen ? "rotate-180" : ""}`}
+                  className={`transition-transform ${isInventoryOpen ? "rotate-180" : ""}`}
                 />
               </button>
 
-              {inventoryOpen && (
+              {isInventoryOpen && (
                 <div className="ml-9 mt-1 space-y-1">
                   <Link
                     to="/inventory"

@@ -12,7 +12,6 @@ import {
   doc,
   query,
   orderBy,
-  Timestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import type { InternetUsage } from "../types/InternetUsage";

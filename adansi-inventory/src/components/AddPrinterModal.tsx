@@ -16,7 +16,6 @@ import {
   addCustomColor,
   getAllAccessories,
   addCustomAccessory,
-  DEFAULT_ACCESSORIES,
 } from "../services/printerOptionsService";
 
 type Props = {
@@ -26,14 +25,14 @@ type Props = {
 };
 
 export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
-  const [location, setLocation] = useState("");
-  const [room, setRoom] = useState(""); // NEW: Room/office field
-  const [model, setModel] = useState("");
-  const [printerColorType, setPrinterColorType] = useState<PrinterColor | "">("");
-  const [quantity, setQuantity] = useState(1);
-  const [status, setStatus] = useState<"Active" | "In Repair" | "Retired">("Active");
-  const [accessories, setAccessories] = useState<string[]>([]);
-  const [enableTonerTracking, setEnableTonerTracking] = useState(false);
+  const [location, setLocation] = useState(() => printer?.location ?? "");
+  const [room, setRoom] = useState(() => printer?.room ?? ""); // NEW: Room/office field
+  const [model, setModel] = useState(() => printer?.model ?? "");
+  const [printerColorType, setPrinterColorType] = useState<PrinterColor | "">(() => printer?.printerColorType ?? "");
+  const [quantity, setQuantity] = useState(() => printer?.quantity ?? 1);
+  const [status, setStatus] = useState<"Active" | "In Repair" | "Retired">(() => printer?.status ?? "Active");
+  const [accessories, setAccessories] = useState<string[]>(() => printer?.accessories ?? []);
+  const [enableTonerTracking, setEnableTonerTracking] = useState(() => printer?.hasTonerTracking ?? false);
   
   // Custom input states
   const [showCustomLocation, setShowCustomLocation] = useState(false);
@@ -49,7 +48,7 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
   const [availableLocations, setAvailableLocations] = useState<string[]>([]);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [availableColors, setAvailableColors] = useState<Array<{ value: string; label: string }>>([]);
-  const [availableAccessories, setAvailableAccessories] = useState<string[]>([]);
+  const [, setAvailableAccessories] = useState<string[]>([]);
 
   // Load available options on mount
   useEffect(() => {
@@ -67,19 +66,6 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
     }
     loadOptions();
   }, []);
-
-  useEffect(() => {
-    if (printer) {
-      setLocation(printer.location);
-      setRoom(printer.room || ""); // NEW: Load room if exists
-      setModel(printer.model);
-      setPrinterColorType(printer.printerColorType);
-      setQuantity(printer.quantity);
-      setStatus(printer.status);
-      setAccessories(printer.accessories || []);
-      setEnableTonerTracking(printer.hasTonerTracking || false);
-    }
-  }, [printer]);
 
   async function handleAddCustomLocation() {
     if (customLocation.trim()) {
@@ -153,14 +139,6 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
     }
 
     onClose();
-  }
-
-  function toggleAccessory(accessory: string) {
-    setAccessories((prev) =>
-      prev.includes(accessory)
-        ? prev.filter((a) => a !== accessory)
-        : [...prev, accessory]
-    );
   }
 
   return (
@@ -502,5 +480,4 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
     </div>
   );
 }
-
 

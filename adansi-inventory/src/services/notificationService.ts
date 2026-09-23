@@ -22,6 +22,7 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
+import { DEFAULT_TONER_REORDER_LEVEL, normaliseReorderLevel } from "../toners/stockLevel";
 import emailjs from '@emailjs/browser';
 
 const NOTIFICATIONS_COLLECTION = "notifications";
@@ -58,7 +59,11 @@ export interface NotificationSettings {
   emails: string[];
   phoneNumbers: string[];
   thresholds: {
+    /** Legacy percentage-of-initial rule. Nothing reads it; kept so existing
+     *  settings documents round-trip unchanged. Use tonerUnits instead. */
     toner: number;
+    /** Cartridges. A toner at or below this many needs reordering. */
+    tonerUnits: number;
     gadget: number;
     internet: number;
     a4Sheet: number;
@@ -208,7 +213,7 @@ async function sendEmailNotification(
       return true;
     }
     return false;
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ EmailJS error for", recipientEmail, ":", error);
     return false;
   }
@@ -338,6 +343,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings | 
         phoneNumbers: [],
         thresholds: {
           toner: 20,
+          tonerUnits: DEFAULT_TONER_REORDER_LEVEL,
           gadget: 5,
           internet: 7,
           a4Sheet: 10,
@@ -346,17 +352,18 @@ export async function getNotificationSettings(): Promise<NotificationSettings | 
     }
 
     const docData = snapshot.docs[0];
-    const data = docData.data() as any;
+    const data = docData.data() as Record<string, unknown>;
     
     // Migration: Convert old formats to new array format
     const settings: NotificationSettings = {
       id: docData.id,
-      emailEnabled: data.emailEnabled || false,
-      smsEnabled: data.smsEnabled || false,
+      emailEnabled: Boolean(data.emailEnabled),
+      smsEnabled: Boolean(data.smsEnabled),
       emails: Array.isArray(data.emails) ? data.emails : (data.email ? [data.email] : []),
       phoneNumbers: Array.isArray(data.phoneNumbers) ? data.phoneNumbers : (data.phoneNumber ? [data.phoneNumber] : []),
-      thresholds: data.thresholds || {
+      thresholds: (data.thresholds as NotificationSettings["thresholds"]) || {
         toner: 20,
+        tonerUnits: DEFAULT_TONER_REORDER_LEVEL,
         gadget: 5,
         internet: 7,
         a4Sheet: 10,
@@ -407,3 +414,21 @@ export async function updateNotificationSettings(
 
 
 
+
+
+/**
+ * How few cartridges before a toner needs reordering.
+ *
+ * Read separately from the rest of the settings so callers that only need this
+ * number do not have to know where it lives. Falls back to the default rather
+ * than throwing — a settings read failing must not make every toner look fine.
+ */
+export async function getTonerReorderLevel(): Promise<number> {
+  try {
+    const settings = await getNotificationSettings();
+    return normaliseReorderLevel(settings?.thresholds?.tonerUnits);
+  } catch (error) {
+    console.error("Error reading the toner reorder level:", error);
+    return DEFAULT_TONER_REORDER_LEVEL;
+  }
+}

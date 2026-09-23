@@ -1,7 +1,7 @@
 
 // src/components/AddGadgetModal.tsx - BASE64 WITH IMEI (No Firebase Storage!)
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X, Upload, Plus } from "lucide-react";
 import type { Gadget, GadgetStatus, DeviceType, Condition } from "../types/gadget";
 import Swal from "sweetalert2";
@@ -67,7 +67,9 @@ export default function AddGadgetModal({
   const [imagePreview, setImagePreview] = useState<string>("");
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
+  const [accessoryTypesLoaded, setAccessoryTypesLoaded] = useState(false);
+  if (!accessoryTypesLoaded) {
+    setAccessoryTypesLoaded(true);
     const saved = localStorage.getItem("customAccessoryTypes");
     if (saved) {
       try {
@@ -76,10 +78,12 @@ export default function AddGadgetModal({
         console.error("Failed to load custom accessory types:", e);
       }
     }
-  }, []);
+  }
 
-  useEffect(() => {
-    if (existing) {
+  const [initialized, setInitialized] = useState(false);
+  if (existing && !initialized) {
+    setInitialized(true);
+    {
       setSelectedDeviceType(existing.deviceType);
       setModel(existing.model);
       setStatus(existing.status);
@@ -109,7 +113,7 @@ export default function AddGadgetModal({
         setImagePreview(existing.imageUrl);
       }
     }
-  }, [existing]);
+  }
 
   // ✅ CONVERT IMAGE TO BASE64 - NO FIREBASE STORAGE NEEDED!
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {

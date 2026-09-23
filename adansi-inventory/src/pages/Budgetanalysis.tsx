@@ -2,7 +2,7 @@
 
 
 import { useState, useEffect } from "react";
-import { Download, DollarSign, TrendingUp, TrendingDown, AlertCircle, CheckCircle } from "lucide-react";
+import { Download, TrendingUp, AlertCircle, CheckCircle } from "lucide-react";
 import { getToners } from "../services/tonerService";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
@@ -17,20 +17,14 @@ export default function BudgetAnalysis() {
   });
 
   // Budget allocations (can be made dynamic later)
-  const [budgetAllocations, setBudgetAllocations] = useState({
+  const [budgetAllocations] = useState({
     toners: 15000,
     a4Sheets: 10000,
     internet: 12000,
     gadgets: 13000,
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   async function loadData() {
-    setLoading(true);
-    
     // Load actual spending data
     const [toners, sheets, internet] = await Promise.all([
       getToners(),
@@ -41,7 +35,7 @@ export default function BudgetAnalysis() {
     const tonerCost = toners.reduce((sum, t) => sum + (t.quantity * (t.costPerUnit || 0)), 0);
     const sheetCost = sheets.reduce((sum, s) => sum + s.currentQuantity * s.costPerReam, 0);
     const internetCost = internet.reduce((sum, i) => sum + (i.cost || 0), 0);
-    
+
     setActualData({
       toners: tonerCost,
       a4Sheets: sheetCost,
@@ -51,6 +45,12 @@ export default function BudgetAnalysis() {
 
     setLoading(false);
   }
+
+  useEffect(() => {
+    (async () => {
+      await loadData();
+    })();
+  }, []);
 
   const totalBudget = Object.values(budgetAllocations).reduce((sum, val) => sum + val, 0);
   const totalSpent = Object.values(actualData).reduce((sum, val) => sum + val, 0);

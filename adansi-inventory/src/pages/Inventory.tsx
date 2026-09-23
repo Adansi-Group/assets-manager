@@ -6,13 +6,12 @@
 
 
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Package,
   Plus,
   Search,
   TrendingUp,
-  TrendingDown,
   Edit2,
   Trash2,
   AlertCircle,
@@ -110,7 +109,6 @@ type InventoryStatus = "In Stock" | "Low Stock" | "Out of Stock";
 
 export default function Inventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<InventoryCategory | "All">("All");
@@ -129,7 +127,7 @@ export default function Inventory() {
     minStockLevel: 5,
     location: "Ashaley Botwe Branch"
   });
-  const [itemSpecificData, setItemSpecificData] = useState<Record<string, any>>({});
+  const [itemSpecificData, setItemSpecificData] = useState<Record<string, string | number>>({});
   const [stockQuantity, setStockQuantity] = useState(1);
   const [stockReason, setStockReason] = useState("");
   const [useCustomItem, setUseCustomItem] = useState(false);
@@ -140,10 +138,6 @@ export default function Inventory() {
   useEffect(() => {
     loadItems();
   }, []);
-
-  useEffect(() => {
-    filterItems();
-  }, [items, searchTerm, selectedCategory]);
 
   const loadItems = async () => {
     try {
@@ -158,7 +152,7 @@ export default function Inventory() {
     }
   };
 
-  const filterItems = () => {
+  const filteredItems = useMemo(() => {
     let filtered = items;
 
     // Filter by category
@@ -177,8 +171,8 @@ export default function Inventory() {
       );
     }
 
-    setFilteredItems(filtered);
-  };
+    return filtered;
+  }, [items, searchTerm, selectedCategory]);
 
   const getStatus = (item: InventoryItem): InventoryStatus => {
     if (item.quantity === 0) return "Out of Stock";
@@ -359,7 +353,7 @@ export default function Inventory() {
     return ITEM_FIELD_VISIBILITY[itemName] || { showMinStock: true, showUnitPrice: true, showSupplier: true, showRoom: true };
   };
 
-  const parseItemSpecificData = (notes: string | undefined): Record<string, any> => {
+  const parseItemSpecificData = (notes: string | undefined): Record<string, string | number> => {
     if (!notes) return {};
     try {
       const parsed = JSON.parse(notes);
@@ -483,7 +477,7 @@ export default function Inventory() {
               {customCategories.map((cat) => (
                 <button
                   key={cat}
-                  onClick={() => setSelectedCategory(cat as any)}
+                  onClick={() => setSelectedCategory(cat as InventoryCategory)}
                   className={`px-4 py-2 rounded-lg whitespace-nowrap text-sm font-medium transition-colors ${
                     selectedCategory === cat
                       ? "bg-purple-600 text-white"

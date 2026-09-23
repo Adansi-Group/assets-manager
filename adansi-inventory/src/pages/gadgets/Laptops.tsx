@@ -9,7 +9,7 @@
 
 // src/pages/gadgets/Laptops.tsx - WITH BEAUTIFUL DETAILS MODAL
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import AddGadgetModal from "../../components/AddGadgetModal";
 import ExportDropdown from "../../components/ExportDropdown";
@@ -48,13 +48,17 @@ export default function Laptops() {
   }
 
   useEffect(() => {
-    loadLaptops();
+    (async () => {
+      await loadLaptops();
+    })();
   }, []);
 
   // Reset to page 1 when filters change
-  useEffect(() => {
+  const [prevFilters, setPrevFilters] = useState({ search, statusFilter });
+  if (prevFilters.search !== search || prevFilters.statusFilter !== statusFilter) {
+    setPrevFilters({ search, statusFilter });
     setCurrentPage(1);
-  }, [search, statusFilter]);
+  }
 
   async function handleSave(gadget: Gadget | Omit<Gadget, "id">) {
     try {
@@ -453,7 +457,7 @@ export default function Laptops() {
   );
 }
 
-function Stat({ title, value, color = "", icon }: any) {
+function Stat({ title, value, color = "", icon }: { title: string; value: string | number; color?: string; icon?: ReactNode }) {
   return (
     <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow border border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-2">

@@ -3,7 +3,7 @@
 
 
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Swal from "sweetalert2";
 import AddA4SheetModal from "../components/Adda4sheetmodal";
 import type { A4Sheet } from "../types/A4Sheet";
@@ -16,10 +16,8 @@ import {
 } from "../services/a4SheetService";
 import {
   Download,
-  FileText,
   AlertTriangle,
   CheckCircle,
-  TrendingUp,
   Package,
 } from "lucide-react";
 
@@ -63,7 +61,9 @@ export default function A4Sheets() {
   }
 
   useEffect(() => {
-    loadSheets();
+    (async () => {
+      await loadSheets();
+    })();
   }, []);
 
   async function handleSave(
@@ -473,7 +473,7 @@ export default function A4Sheets() {
 
 /* COMPONENTS */
 
-function Card({ title, value, color = "", icon }: any) {
+function Card({ title, value, color = "", icon }: { title: string; value: string | number; color?: string; icon?: ReactNode }) {
   return (
     <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow border border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-2">

@@ -5,7 +5,29 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login, loginWithGoogle } from "../services/authService";
+import { FirebaseError } from "firebase/app";
 import Swal from "sweetalert2";
+
+function getAuthErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof FirebaseError)) {
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  switch (error.code) {
+    case "auth/unauthorized-domain":
+      return "Google login is not enabled for this local address. Add localhost and 127.0.0.1 to Firebase Authentication authorized domains.";
+    case "auth/popup-closed-by-user":
+      return "The Google sign-in window was closed before login completed.";
+    case "auth/invalid-credential":
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+      return "Invalid email or password.";
+    case "auth/too-many-requests":
+      return "Too many failed attempts. Please wait a moment and try again.";
+    default:
+      return error.message || fallback;
+  }
+}
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -20,11 +42,11 @@ export default function Login() {
     try {
       await login(email, password);
       navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error) {
       Swal.fire({
         icon: "error",
         title: "Login Failed",
-        text: error.message || "Invalid email or password",
+        text: getAuthErrorMessage(error, "Invalid email or password"),
       });
     } finally {
       setLoading(false);
@@ -37,11 +59,11 @@ export default function Login() {
     try {
       await loginWithGoogle();
       navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error) {
       Swal.fire({
         icon: "error",
         title: "Google Login Failed",
-        text: error.message || "Could not sign in with Google",
+        text: getAuthErrorMessage(error, "Could not sign in with Google"),
       });
     } finally {
       setLoading(false);

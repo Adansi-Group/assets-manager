@@ -5,7 +5,9 @@
 
 // src/types/supportTicket.ts
 
-export type TicketCategory = 
+import type { Timestamp } from "firebase/firestore";
+
+export type TicketCategory =
   | "Printer Issue"
   | "Laptop Issue"
   | "Phone Issue"
@@ -37,5 +39,5 @@ export type SupportTicket = {
   resolvedBy?: string;
   resolution?: string;
   notes?: string;
-  createdAt?: any;
+  createdAt?: Timestamp;
 };

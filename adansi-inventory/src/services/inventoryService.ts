@@ -46,7 +46,7 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
 // ADD NEW ITEM
 export async function addInventoryItem(item: Omit<InventoryItem, "id">): Promise<void> {
   try {
-    const cleanItem: any = {
+    const cleanItem: Record<string, unknown> = {
       category: item.category,
       itemName: item.itemName.trim(),
       quantity: item.quantity || 0,
@@ -83,9 +83,9 @@ export async function addInventoryItem(item: Omit<InventoryItem, "id">): Promise
 
     await addDoc(collection(db, COLLECTION), cleanItem);
     console.log("✅ Inventory item added successfully");
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ Error adding inventory item:", error);
-    throw new Error(`Failed to add inventory item: ${error.message}`);
+    throw new Error(`Failed to add inventory item: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -94,12 +94,12 @@ export async function updateInventoryItem(item: InventoryItem): Promise<void> {
   try {
     const { id, createdAt, ...payload } = item;
     
-    const updatePayload: any = {
+    const updatePayload: Record<string, unknown> = {
       updatedAt: Timestamp.now(),
     };
-    
+
     Object.keys(payload).forEach((key) => {
-      const value = (payload as any)[key];
+      const value = (payload as Record<string, unknown>)[key];
       
       if (value === undefined || value === "") {
         updatePayload[key] = deleteField();
@@ -115,9 +115,9 @@ export async function updateInventoryItem(item: InventoryItem): Promise<void> {
     
     await updateDoc(doc(db, COLLECTION, id), updatePayload);
     console.log("✅ Inventory item updated successfully");
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ Error updating inventory item:", error);
-    throw new Error(`Failed to update inventory item: ${error.message}`);
+    throw new Error(`Failed to update inventory item: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -147,11 +147,11 @@ export async function getItemsByCategory(category: string): Promise<InventoryIte
 // ADD STOCK (Increase quantity)
 export async function addStock(
   itemId: string,
-  itemName: string,
+  _itemName: string,
   quantityToAdd: number,
-  location: string,
-  reason: string,
-  performedBy: string
+  _location: string,
+  _reason: string,
+  _performedBy: string
 ): Promise<void> {
   try {
     // Get current item
@@ -162,7 +162,7 @@ export async function addStock(
     const newQuantity = item.quantity + quantityToAdd;
 
     // Update item quantity
-    const updatePayload: any = {
+    const updatePayload: Record<string, unknown> = {
       quantity: newQuantity,
       lastRestocked: new Date().toISOString(),
       updatedAt: Timestamp.now(),
@@ -184,11 +184,11 @@ export async function addStock(
 // REMOVE STOCK (Decrease quantity)
 export async function removeStock(
   itemId: string,
-  itemName: string,
+  _itemName: string,
   quantityToRemove: number,
-  location: string,
-  reason: string,
-  performedBy: string
+  _location: string,
+  _reason: string,
+  _performedBy: string
 ): Promise<void> {
   try {
     // Get current item
@@ -199,7 +199,7 @@ export async function removeStock(
     const newQuantity = Math.max(0, item.quantity - quantityToRemove);
 
     // Update item quantity
-    const updatePayload: any = {
+    const updatePayload: Record<string, unknown> = {
       quantity: newQuantity,
       updatedAt: Timestamp.now(),
     };

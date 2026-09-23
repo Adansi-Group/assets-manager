@@ -10,6 +10,9 @@ import { X, Plus } from "lucide-react";
 import Swal from "sweetalert2";
 import type { Toner } from "../types/toner";
 import { getAllTonerTypes, addTonerType } from "../services/tonerService";
+import { getPrinters } from "../services/printerService";
+import { selectablePrinterModels } from "../toners/stockMatching";
+import type { Printer } from "../types/printer";
 
 type Props = {
   onClose: () => void;
@@ -41,12 +44,8 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
   
   // Toner types from Firebase
   const [tonerTypes, setTonerTypes] = useState<string[]>([]);
+  const [printers, setPrinters] = useState<Printer[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
-
-  // Load toner types on mount
-  useEffect(() => {
-    loadTonerTypes();
-  }, []);
 
   async function loadTonerTypes() {
     setLoadingTypes(true);
@@ -55,8 +54,26 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
     setLoadingTypes(false);
   }
 
-  // Get compatible printers based on selected toner
-  const compatiblePrinters = tonerType ? TONER_PRINTER_MAP[tonerType] || [] : [];
+  // Load toner types on mount
+  useEffect(() => {
+    (async () => {
+      await loadTonerTypes();
+    })();
+  }, []);
+
+  // The printers that actually exist decide what a record may be filed under,
+  // so a saved model always names one of them.
+  useEffect(() => {
+    (async () => {
+      setPrinters(await getPrinters());
+    })();
+  }, []);
+
+  // Get compatible printers based on selected toner. The map is only a hint
+  // now: the list itself comes from the printers on record.
+  const compatiblePrinters = tonerType
+    ? selectablePrinterModels(printers, TONER_PRINTER_MAP[tonerType] || [], existing?.printerType)
+    : [];
 
   // Handle adding new toner type
   async function handleAddTonerType() {
@@ -113,43 +130,44 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
           timer: 1500,
           showConfirmButton: false,
         });
-      } catch (error: any) {
+      } catch (error) {
         Swal.fire({
           icon: 'error',
           title: 'Error',
-          text: error.message || 'Failed to add toner type',
+          text: error instanceof Error ? error.message : 'Failed to add toner type',
         });
       }
     }
   }
 
   // Auto-reset printer type when toner type changes
-  useEffect(() => {
+  const [prevTonerType, setPrevTonerType] = useState(tonerType);
+  if (tonerType !== prevTonerType) {
+    setPrevTonerType(tonerType);
     if (tonerType && !existing) {
       // If there's only one compatible printer, auto-select it
       if (compatiblePrinters.length === 1) {
         setPrinterType(compatiblePrinters[0]);
-      } else {
+      } else if (!compatiblePrinters.includes(printerType)) {
         // Reset printer type if current selection is not compatible
-        if (!compatiblePrinters.includes(printerType)) {
-          setPrinterType("");
-        }
+        setPrinterType("");
       }
     }
-  }, [tonerType, compatiblePrinters, printerType, existing]);
+  }
 
-  useEffect(() => {
-    if (existing) {
-      setLocation(existing.location);
-      setRoom(existing.room || ""); // Load room if exists
-      setPrinterType(existing.printerType);
-      setTonerType(existing.tonerType);
-      setColorType(existing.colorType);
-      setQuantity(existing.quantity);
-      setInitialQuantity(existing.initialQuantity || existing.quantity);
-      setEnableTracking(!!(existing.initialQuantity && existing.lastCheckedDate));
-    }
-  }, [existing]);
+  // Populate form fields once when editing an existing toner
+  const [initialized, setInitialized] = useState(false);
+  if (existing && !initialized) {
+    setInitialized(true);
+    setLocation(existing.location);
+    setRoom(existing.room || ""); // Load room if exists
+    setPrinterType(existing.printerType);
+    setTonerType(existing.tonerType);
+    setColorType(existing.colorType);
+    setQuantity(existing.quantity);
+    setInitialQuantity(existing.initialQuantity || existing.quantity);
+    setEnableTracking(!!(existing.initialQuantity && existing.lastCheckedDate));
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -298,7 +316,7 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
                 </select>
                 {tonerType && compatiblePrinters.length === 0 && (
                   <p className="text-xs text-red-500 dark:text-red-400 mt-1">
-                    No compatible printers found for this toner. Please update TONER_PRINTER_MAP in AddTonerModal.tsx
+                    No printers are on record yet. Add the printer on the Printers page first, so this stock can be linked to it.
                   </p>
                 )}
               </div>

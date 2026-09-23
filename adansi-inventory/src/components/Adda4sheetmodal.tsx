@@ -3,7 +3,7 @@
 
 
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import type { A4Sheet } from "../types/A4Sheet";
 
@@ -16,34 +16,18 @@ type Props = {
   officeNames: string[];
 };
 
-export default function AddA4SheetModal({ onClose, onSave, sheet, officeNames }: Props) {
-  const [officeName, setOfficeName] = useState("");
-  const [currentQuantity, setCurrentQuantity] = useState(0);
-  const [initialQuantity, setInitialQuantity] = useState(0);
-  const [minimumStockLevel, setMinimumStockLevel] = useState(5);
-  const [dateAdded, setDateAdded] = useState("");
-  const [costPerReam, setCostPerReam] = useState(0);
-  const [supplier, setSupplier] = useState("");
-  const [brand, setBrand] = useState("PaperOne");
-  const [notes, setNotes] = useState("");
+const todayString = () => new Date().toISOString().split("T")[0];
 
-  useEffect(() => {
-    if (sheet) {
-      setOfficeName(sheet.officeName);
-      setCurrentQuantity(sheet.currentQuantity);
-      setInitialQuantity(sheet.initialQuantity);
-      setMinimumStockLevel(sheet.minimumStockLevel);
-      setDateAdded(sheet.dateAdded);
-      setCostPerReam(sheet.costPerReam);
-      setSupplier(sheet.supplier);
-      setBrand(sheet.brand);
-      setNotes(sheet.notes || "");
-    } else {
-      // Set defaults for new record
-      const today = new Date().toISOString().split("T")[0];
-      setDateAdded(today);
-    }
-  }, [sheet]);
+export default function AddA4SheetModal({ onClose, onSave, sheet, officeNames }: Props) {
+  const [officeName, setOfficeName] = useState(() => sheet?.officeName ?? "");
+  const [currentQuantity, setCurrentQuantity] = useState(() => sheet?.currentQuantity ?? 0);
+  const [initialQuantity, setInitialQuantity] = useState(() => sheet?.initialQuantity ?? 0);
+  const [minimumStockLevel, setMinimumStockLevel] = useState(() => sheet?.minimumStockLevel ?? 5);
+  const [dateAdded, setDateAdded] = useState(() => sheet?.dateAdded ?? todayString());
+  const [costPerReam, setCostPerReam] = useState(() => sheet?.costPerReam ?? 0);
+  const [supplier, setSupplier] = useState(() => sheet?.supplier ?? "");
+  const [brand, setBrand] = useState(() => sheet?.brand ?? "PaperOne");
+  const [notes, setNotes] = useState(() => sheet?.notes ?? "");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

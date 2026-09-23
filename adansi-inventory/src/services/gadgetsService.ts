@@ -28,20 +28,46 @@ import type { Gadget } from "../types/gadget";
 
 const COLLECTION = "gadgets";
 
+function isLegacyLockerDevice(gadget: Gadget): boolean {
+  return Boolean(gadget.returnedFrom && String(gadget.returnedFrom).trim());
+}
+
+function isActiveGadget(gadget: Gadget): boolean {
+  const isLocker = gadget.lockerDevice === true || isLegacyLockerDevice(gadget);
+  if (!isLocker) return true;
+  return gadget.lockerAction === "Reassigned" || (!gadget.lockerAction && gadget.status === "In-Use");
+}
+
+async function getAllGadgetRecords(): Promise<Gadget[]> {
+  const q = query(collection(db, COLLECTION), orderBy("createdAt", "desc"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<Gadget, "id">),
+  }));
+}
+
 // GET ALL GADGETS
 export async function getGadgets(): Promise<Gadget[]> {
   try {
-    const q = query(collection(db, COLLECTION), orderBy("createdAt", "desc"));
-    const snapshot = await getDocs(q);
-
-    return snapshot.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<Gadget, "id">),
-    }));
+    const gadgets = await getAllGadgetRecords();
+    return gadgets.filter(isActiveGadget);
   } catch (error) {
     console.error("Error fetching gadgets:", error);
     return [];
   }
+}
+
+/**
+ * Same as getGadgets(), but throws instead of returning [] on failure.
+ *
+ * Reporting needs this: an empty array from a failed read is indistinguishable
+ * from a genuinely empty estate, which would put "0 devices" in front of
+ * management as though it were a fact.
+ */
+export async function getGadgetsStrict(): Promise<Gadget[]> {
+  const gadgets = await getAllGadgetRecords();
+  return gadgets.filter(isActiveGadget);
 }
 
 // ADD NEW GADGET
@@ -71,7 +97,7 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
     }
 
     // Clean the data - remove undefined values and trim strings
-    const cleanGadget: any = {
+    const cleanGadget: Record<string, unknown> = {
       deviceType: gadget.deviceType,
       model: gadget.model.trim(),
       year: gadget.year,
@@ -130,13 +156,36 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
       cleanGadget.notes = gadget.notes.trim();
     }
 
+    // Former-staff returned-device fields
+    if (gadget.returnedFrom && gadget.returnedFrom.trim()) {
+      cleanGadget.returnedFrom = gadget.returnedFrom.trim();
+    }
+    if (gadget.formerDepartment && gadget.formerDepartment.trim()) {
+      cleanGadget.formerDepartment = gadget.formerDepartment.trim();
+    }
+    if (gadget.staffLeftDate) {
+      cleanGadget.staffLeftDate = gadget.staffLeftDate;
+    }
+    if (gadget.lockerDevice) cleanGadget.lockerDevice = true;
+    if (gadget.lockerReason) cleanGadget.lockerReason = gadget.lockerReason;
+    if (gadget.lockerCondition) cleanGadget.lockerCondition = gadget.lockerCondition;
+    if (gadget.lockerAction) cleanGadget.lockerAction = gadget.lockerAction;
+    if (gadget.lockerDate) cleanGadget.lockerDate = gadget.lockerDate;
+    if (gadget.lockerLocation?.trim()) cleanGadget.lockerLocation = gadget.lockerLocation.trim();
+    if (gadget.outcomeDate) cleanGadget.outcomeDate = gadget.outcomeDate;
+    if (gadget.reassignedTo?.trim()) cleanGadget.reassignedTo = gadget.reassignedTo.trim();
+    // Condition applies to returned laptops/phones too (not just accessories)
+    if (gadget.deviceType !== "Accessory" && gadget.condition) {
+      cleanGadget.condition = gadget.condition;
+    }
+
     console.log("Adding gadget to Firestore:", cleanGadget);
 
     await addDoc(collection(db, COLLECTION), cleanGadget);
     console.log("✅ Gadget added successfully");
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ Error adding gadget:", error);
-    throw new Error(`Failed to add gadget: ${error.message}`);
+    throw new Error(`Failed to add gadget: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -146,10 +195,10 @@ export async function updateGadget(gadget: Gadget): Promise<void> {
     const { id, createdAt, ...payload } = gadget;
     
     // Build the update payload
-    const updatePayload: any = {};
-    
+    const updatePayload: Record<string, unknown> = {};
+
     Object.keys(payload).forEach((key) => {
-      const value = (payload as any)[key];
+      const value = (payload as Record<string, unknown>)[key];
       
       // If value is explicitly undefined, use deleteField() to remove it from Firestore
       if (value === undefined) {
@@ -165,9 +214,9 @@ export async function updateGadget(gadget: Gadget): Promise<void> {
     
     await updateDoc(doc(db, COLLECTION, id), updatePayload);
     console.log("✅ Gadget updated successfully");
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ Error updating gadget:", error);
-    throw new Error(`Failed to update gadget: ${error.message}`);
+    throw new Error(`Failed to update gadget: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -188,6 +237,12 @@ export async function getGadgetsByType(
 ): Promise<Gadget[]> {
   const gadgets = await getGadgets();
   return gadgets.filter((g) => g.deviceType === deviceType);
+}
+
+// GET LOCKER DEVICES. Legacy returned-device records are included automatically.
+export async function getReturnedDevices(): Promise<Gadget[]> {
+  const gadgets = await getAllGadgetRecords();
+  return gadgets.filter((g) => g.lockerDevice === true || isLegacyLockerDevice(g));
 }
 
 // GET GADGETS BY STATUS

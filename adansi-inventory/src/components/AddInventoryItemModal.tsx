@@ -97,7 +97,7 @@ export default function AddInventoryItemModal({ category, onClose, onAdd }: Prop
   const predefinedItems = INVENTORY_ITEMS_BY_CATEGORY[category];
   
   const [selectedItem, setSelectedItem] = useState("");
-  const [formData, setFormData] = useState<Record<string, any>>({
+  const [formData, setFormData] = useState<Record<string, string | number | undefined>>({
     quantity: 0,
     unit: "piece(s)",
     minStockLevel: 5,
@@ -107,7 +107,7 @@ export default function AddInventoryItemModal({ category, onClose, onAdd }: Prop
 
   const currentItemFields = selectedItem ? (ITEM_SPECIFIC_FIELDS[selectedItem] || []) : [];
 
-  function handleChange(field: string, value: any) {
+  function handleChange(field: string, value: string | number) {
     setFormData(prev => ({ ...prev, [field]: value }));
   }
 
@@ -115,7 +115,7 @@ export default function AddInventoryItemModal({ category, onClose, onAdd }: Prop
     setSelectedItem(itemName);
     // Reset item-specific fields
     const fieldsToKeep = ["quantity", "unit", "minStockLevel", "location", "room", "unitPrice", "supplier", "notes"];
-    const newFormData: Record<string, any> = {};
+    const newFormData: Record<string, string | number | undefined> = {};
     fieldsToKeep.forEach(field => {
       if (formData[field] !== undefined) {
         newFormData[field] = formData[field];
@@ -143,30 +143,31 @@ export default function AddInventoryItemModal({ category, onClose, onAdd }: Prop
       const itemData: Omit<InventoryItem, "id"> = {
         category,
         itemName: selectedItem,
-        quantity: parseInt(formData.quantity),
-        unit: formData.unit,
-        minStockLevel: parseInt(formData.minStockLevel),
-        location: formData.location,
+        quantity: parseInt(String(formData.quantity)),
+        unit: String(formData.unit),
+        minStockLevel: parseInt(String(formData.minStockLevel)),
+        location: String(formData.location),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
       // Add optional common fields
-      if (formData.brand) itemData.brand = formData.brand;
-      if (formData.model) itemData.model = formData.model;
-      if (formData.room) itemData.room = formData.room;
+      if (formData.brand) itemData.brand = String(formData.brand);
+      if (formData.model) itemData.model = String(formData.model);
+      if (formData.room) itemData.room = String(formData.room);
       if (formData.unitPrice) {
-        itemData.unitPrice = parseFloat(formData.unitPrice);
+        itemData.unitPrice = parseFloat(String(formData.unitPrice));
         itemData.totalValue = itemData.quantity * itemData.unitPrice;
       }
-      if (formData.supplier) itemData.supplier = formData.supplier;
-      if (formData.notes) itemData.notes = formData.notes;
+      if (formData.supplier) itemData.supplier = String(formData.supplier);
+      if (formData.notes) itemData.notes = String(formData.notes);
 
       // Add item-specific fields to notes as JSON
-      const specificFields: Record<string, any> = {};
+      const specificFields: Record<string, string | number> = {};
       currentItemFields.forEach(field => {
-        if (formData[field.name]) {
-          specificFields[field.name] = formData[field.name];
+        const value = formData[field.name];
+        if (value !== undefined && value !== "") {
+          specificFields[field.name] = value;
         }
       });
 

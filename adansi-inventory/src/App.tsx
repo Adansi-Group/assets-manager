@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
+import type { User as FirebaseUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "./firebase/firebase";
-import type { User } from "./types/users";
+import type { User, Permission } from "./types/users";
 import { hasPermission } from "./types/users";
 
 import Login from "./pages/Login";
@@ -25,15 +26,17 @@ import TonerReports from "./pages/TonerReports";
 import GadgetReports from "./pages/Gadgetreports";
 import InternetReports from "./pages/Internetreports";
 import A4SheetReports from "./pages/A4sheetreports";
+import ConsumablesReport from "./pages/ConsumablesReport";
 import BudgetAnalysis from "./pages/Budgetanalysis";
 import Accessories from "./pages/gadgets/Accessories";
+import ReturnedDevices from "./pages/gadgets/ReturnedDevices";
 import SupportTickets from "./pages/SupportTicket";
 import Users from "./pages/Users";
 import Inventory from "./pages/Inventory";
 import InventoryCategory from "./pages/inventory/InventoryCategory";
 
 export default function App() {
-  const [firebaseUser, setFirebaseUser] = useState<any>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -83,7 +86,7 @@ export default function App() {
 
   const canAccess = (permission: string) => {
     if (!currentUser) return false;
-    return hasPermission(currentUser, permission as any);
+    return hasPermission(currentUser, permission as Permission);
   };
 
   return (
@@ -123,6 +126,8 @@ export default function App() {
               <Route path="/gadgets/phones/add" element={<Smartphones />} />
               <Route path="/gadgets/accessories" element={<Accessories />} />
               <Route path="/gadgets/accessories/add" element={<Accessories />} />
+              <Route path="/gadgets/returned" element={<ReturnedDevices />} />
+              <Route path="/gadgets/returned/add" element={<ReturnedDevices />} />
             </>
           )}
 
@@ -155,6 +160,7 @@ export default function App() {
               <Route path="reports/gadgets" element={<GadgetReports />} />
               <Route path="reports/internet" element={<InternetReports />} />
               <Route path="reports/a4sheets" element={<A4SheetReports />} />
+              <Route path="reports/consumables" element={<ConsumablesReport />} />
               <Route path="reports/consolidated" element={<ConsolidatedReport />} />
               <Route path="reports/budget" element={<BudgetAnalysis />} />
             </>
@@ -185,6 +191,5 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
 
 

@@ -55,7 +55,7 @@ export default function GadgetsExcelImportModal({ onClose, onImport }: Props) {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+      const jsonData: Record<string, unknown>[] = XLSX.utils.sheet_to_json(worksheet);
 
       console.log("📊 Raw Excel Data:", jsonData);
 

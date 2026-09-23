@@ -1,6 +1,6 @@
 
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X, Eye, Save } from "lucide-react";
 import type { Printer, TonerLevel, TonerColor } from "../types/printer";
 
@@ -10,41 +10,35 @@ type Props = {
   printer: Printer;
 };
 
+const todayString = () => new Date().toISOString().split("T")[0];
+
+function getAvailableColors(modelName: string): TonerColor[] {
+  const model = modelName.toLowerCase();
+
+  // PIXMA printers use only 2 cartridges: Black and Color
+  if (model.includes("pixma")) {
+    return ["Black", "Yellow"]; // Using Yellow to represent "Color" cartridge
+  }
+
+  // All other printers use standard 4 colors
+  return ["Black", "Cyan", "Magenta", "Yellow"];
+}
+
 export default function QuickCheckTonerModal({ onClose, onSave, printer }: Props) {
-  const [tonerLevels, setTonerLevels] = useState<TonerLevel[]>([]);
-  const [dateChecked, setDateChecked] = useState("");
-
-  // Determine available colors based on printer model
-  const getAvailableColors = (): TonerColor[] => {
-    const model = printer.model.toLowerCase();
-    
-    // PIXMA printers use only 2 cartridges: Black and Color
-    if (model.includes('pixma')) {
-      return ["Black", "Yellow"]; // Using Yellow to represent "Color" cartridge
-    }
-    
-    // All other printers use standard 4 colors
-    return ["Black", "Cyan", "Magenta", "Yellow"];
-  };
-
-  const availableColors = getAvailableColors();
-
-  useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    setDateChecked(today);
-
-    // Initialize with existing levels or default to 100%
-    const initialLevels = availableColors.map((color) => {
+  const initialDateChecked = todayString();
+  const availableColors = getAvailableColors(printer.model);
+  const [tonerLevels, setTonerLevels] = useState<TonerLevel[]>(() =>
+    availableColors.map((color) => {
       const existing = printer.tonerLevels?.find((t) => t.color === color);
       return existing || {
         color,
         currentPercentage: 100,
-        lastChecked: today,
-        lastReplaced: today,
+        lastChecked: initialDateChecked,
+        lastReplaced: initialDateChecked,
       };
-    });
-    setTonerLevels(initialLevels);
-  }, [printer]);
+    })
+  );
+  const [dateChecked, setDateChecked] = useState(initialDateChecked);
 
   function updateLevel(color: TonerColor, percentage: number) {
     setTonerLevels((prev) =>

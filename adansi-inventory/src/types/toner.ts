@@ -20,6 +20,8 @@ export interface Toner {
   initialQuantity?: number;
   lastCheckedDate?: string;
   status?: "Good" | "Warning" | "Critical";
+  costPerUnit?: number; // Unit cost, used by budget analysis
+  estimatedDaysRemaining?: number; // Projected days until depletion, used by reports
 }
 
 export interface TonerReplacement {
@@ -34,4 +36,5 @@ export interface TonerReplacement {
   previousPercentage: number;
   currentPercentage: number;
   createdAt: string;
+  inventoryTonerId?: string; // Stock record deducted for this replacement
 }

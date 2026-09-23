@@ -1,7 +1,6 @@
 // src/pages/SupportTickets.tsx - COMPLETE SUPPORT TICKETS SYSTEM
 
-import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
 import type { SupportTicket, TicketStatus, TicketCategory, TicketPriority } from "../types/supportTicket";
 import {
   getSupportTickets,
@@ -29,7 +28,17 @@ export default function SupportTickets() {
   }
 
   useEffect(() => {
-    loadTickets();
+    let active = true;
+    (async () => {
+      const data = await getSupportTickets();
+      if (active) {
+        setTickets(data);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function handleAddTicket(ticket: Omit<SupportTicket, "id" | "ticketNumber">) {
@@ -45,11 +54,11 @@ export default function SupportTickets() {
         timer: 2000,
         showConfirmButton: false,
       });
-    } catch (error: any) {
+    } catch (error) {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: error.message || "Failed to create ticket",
+        text: error instanceof Error ? error.message : "Failed to create ticket",
       });
     }
   }
@@ -366,7 +375,7 @@ export default function SupportTickets() {
   );
 }
 
-function Stat({ title, value, color = "", icon }: any) {
+function Stat({ title, value, color = "", icon }: { title: string; value: string | number; color?: string; icon?: ReactNode }) {
   return (
     <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow border border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-2">
@@ -436,7 +445,7 @@ function CategoryBadge({ category }: { category: TicketCategory }) {
 }
 
 // AddTicketModal Component - Conversational Style
-function AddTicketModal({ ticket, onSave, onClose }: any) {
+function AddTicketModal({ ticket, onSave, onClose }: { ticket: SupportTicket | null; onSave: (data: Omit<SupportTicket, "id" | "ticketNumber">) => void; onClose: () => void }) {
   const [formData, setFormData] = useState({
     staffName: ticket?.staffName || "",
     department: ticket?.department || "",
@@ -547,7 +556,7 @@ function AddTicketModal({ ticket, onSave, onClose }: any) {
                   <select
                     required
                     value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value as TicketCategory })}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     <option value="Printer Issue">🖨️ Printer Issue</option>
@@ -568,7 +577,7 @@ function AddTicketModal({ ticket, onSave, onClose }: any) {
                   <select
                     required
                     value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value as TicketPriority })}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     <option value="Low">🟢 Low - Can wait</option>

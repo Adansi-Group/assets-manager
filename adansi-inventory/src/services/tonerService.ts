@@ -19,6 +19,8 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import type { Toner } from "../types/toner";
+import { tonerStatus } from "../toners/stockLevel";
+import { getTonerReorderLevel } from "./notificationService";
 
 const TONERS_COLLECTION = "toners";
 const TONER_TYPES_COLLECTION = "toner_types";
@@ -31,12 +33,19 @@ const TONER_TYPES_COLLECTION = "toner_types";
 export async function getToners(): Promise<Toner[]> {
   try {
     const q = query(collection(db, TONERS_COLLECTION), orderBy("dateBrought", "desc"));
-    const snapshot = await getDocs(q);
+    const [snapshot, reorderLevel] = await Promise.all([getDocs(q), getTonerReorderLevel()]);
 
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as Omit<Toner, "id">),
-    }));
+    return snapshot.docs.map((doc) => {
+      const data = doc.data() as Omit<Toner, "id">;
+      return {
+        id: doc.id,
+        ...data,
+        // Derived on every read, never trusted from the document. A stored
+        // status goes stale the moment a quantity changes, and toners added
+        // through the modal never had one written at all.
+        status: tonerStatus(data.quantity, reorderLevel),
+      };
+    });
   } catch (error) {
     console.error("Error fetching toners:", error);
     return [];
@@ -47,9 +56,9 @@ export async function getToners(): Promise<Toner[]> {
 export async function addToner(toner: Omit<Toner, "id">): Promise<void> {
   try {
     // Remove undefined fields (Firebase doesn't accept undefined values)
-    const cleanToner: any = {};
+    const cleanToner: Record<string, unknown> = {};
     Object.keys(toner).forEach((key) => {
-      const value = (toner as any)[key];
+      const value = (toner as Record<string, unknown>)[key];
       if (value !== undefined) {
         cleanToner[key] = value;
       }
@@ -70,9 +79,9 @@ export async function updateToner(toner: Toner): Promise<void> {
     if (!id) throw new Error("Toner ID is required");
     
     // Remove undefined fields (Firebase doesn't accept undefined values)
-    const cleanData: any = {};
+    const cleanData: Record<string, unknown> = {};
     Object.keys(data).forEach((key) => {
-      const value = (data as any)[key];
+      const value = (data as Record<string, unknown>)[key];
       if (value !== undefined) {
         cleanData[key] = value;
       }

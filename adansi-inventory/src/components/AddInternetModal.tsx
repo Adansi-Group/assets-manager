@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import type { InternetUsage } from "../types/InternetUsage";
 
@@ -10,30 +10,16 @@ type Props = {
   officeNames: string[]; // Pass available office names
 };
 
-export default function AddInternetUsageModal({ onClose, onSave, usage, officeNames }: Props) {
-  const [officeName, setOfficeName] = useState("");
-  const [datePurchased, setDatePurchased] = useState("");
-  const [dateExhausted, setDateExhausted] = useState("");
-  const [bundleSize, setBundleSize] = useState("");
-  const [cost, setCost] = useState<number>(0);
-  const [provider, setProvider] = useState("Starlink");
-  const [notes, setNotes] = useState("");
+const todayString = () => new Date().toISOString().split("T")[0];
 
-  useEffect(() => {
-    if (usage) {
-      setOfficeName(usage.officeName);
-      setDatePurchased(usage.datePurchased);
-      setDateExhausted(usage.dateExhausted || "");
-      setBundleSize(usage.bundleSize || "");
-      setCost(usage.cost || 0);
-      setProvider(usage.provider);
-      setNotes(usage.notes || "");
-    } else {
-      // Set today's date as default
-      const today = new Date().toISOString().split("T")[0];
-      setDatePurchased(today);
-    }
-  }, [usage]);
+export default function AddInternetUsageModal({ onClose, onSave, usage, officeNames }: Props) {
+  const [officeName, setOfficeName] = useState(() => usage?.officeName ?? "");
+  const [datePurchased, setDatePurchased] = useState(() => usage?.datePurchased ?? todayString());
+  const [dateExhausted, setDateExhausted] = useState(() => usage?.dateExhausted ?? "");
+  const [bundleSize, setBundleSize] = useState(() => usage?.bundleSize ?? "");
+  const [cost, setCost] = useState<number>(() => usage?.cost ?? 0);
+  const [provider, setProvider] = useState(() => usage?.provider ?? "Starlink");
+  const [notes, setNotes] = useState(() => usage?.notes ?? "");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

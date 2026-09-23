@@ -2,18 +2,16 @@
 
 
 
+import type { ReactNode } from "react";
 import { useState, useEffect } from "react";
 import { Download, Wifi, DollarSign, Calendar, TrendingUp } from "lucide-react";
-import { getInternetUsage, getInternetUsageStats } from "../services/internetUsageService";
+import { getInternetUsage } from "../services/internetUsageService";
+import type { InternetUsage } from "../types/InternetUsage";
 
 export default function InternetReports() {
-  const [records, setRecords] = useState<any[]>([]);
+  const [records, setRecords] = useState<InternetUsage[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState("month");
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   async function loadData() {
     setLoading(true);
@@ -21,6 +19,12 @@ export default function InternetReports() {
     setRecords(data);
     setLoading(false);
   }
+
+  useEffect(() => {
+    (async () => {
+      await loadData();
+    })();
+  }, []);
 
   // Calculate statistics
   const stats = {
@@ -33,7 +37,7 @@ export default function InternetReports() {
         .filter((r) => r.dateExhausted)
         .reduce((sum, r) => {
           const days = Math.ceil(
-            (new Date(r.dateExhausted).getTime() - new Date(r.datePurchased).getTime()) /
+            (new Date(r.dateExhausted as string).getTime() - new Date(r.datePurchased).getTime()) /
               (1000 * 60 * 60 * 24)
           );
           return sum + days;
@@ -362,7 +366,14 @@ export default function InternetReports() {
   );
 }
 
-function StatCard({ title, value, icon, color }: any) {
+interface StatCardProps {
+  title: string;
+  value: number | string;
+  icon: ReactNode;
+  color: string;
+}
+
+function StatCard({ title, value, icon, color }: StatCardProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
       <div className="flex items-center justify-between">

@@ -3,14 +3,14 @@ import Swal from "sweetalert2";
 import AddPrinterModal from "../components/AddPrinterModal";
 import ReplaceTonerModal from "../components/Replacetonermodal";
 import QuickCheckTonerModal from "../components/QuickCheckTonerModal";
-import type { Printer, TonerLevel, TonerColor } from "../types/printer";
+import type { Printer, TonerLevel } from "../types/printer";
 import {
   getPrinters,
   addPrinter,
   updatePrinter,
   deletePrinter,
 } from "../services/printerService";
-import { addTonerReplacement } from "../services/Tonerreplacementservice";
+import { replacePrinterToner, TonerStockError } from "../services/Tonerreplacementservice";
 import { checkAndNotifyTonerLevel } from "../utils/notificationsHelper";
 import { Droplets, AlertTriangle, Eye } from "lucide-react";
 
@@ -40,7 +40,9 @@ export default function Printers() {
   }
 
   useEffect(() => {
-    loadPrinters();
+    (async () => {
+      await loadPrinters();
+    })();
   }, []);
 
   async function handleSave(printer: Printer | Omit<Printer, "id">) {
@@ -111,44 +113,13 @@ export default function Printers() {
       const printer = printers.find(p => p.id === printerId);
       if (!printer) return;
 
-      await addTonerReplacement({
-        tonerId: printerId,
-        location: printer.location,
-        printerType: printer.model,
-        colorType: color,
-        dateChecked: replacementData.dateChecked,
-        dateReplaced: replacementData.dateReplaced,
-        previousPercentage: replacementData.previousPercentage,
-        currentPercentage: replacementData.currentPercentage,
-      });
-
-      const updatedTonerLevels = printer.tonerLevels || [];
-      const existingTonerIndex = updatedTonerLevels.findIndex(t => t.color === color);
-
-      const newTonerLevel: TonerLevel = {
-        color: color as TonerColor,
-        currentPercentage: replacementData.currentPercentage,
-        lastChecked: replacementData.dateChecked,
-        lastReplaced: replacementData.dateReplaced,
-      };
-
-      if (existingTonerIndex >= 0) {
-        updatedTonerLevels[existingTonerIndex] = newTonerLevel;
-      } else {
-        updatedTonerLevels.push(newTonerLevel);
-      }
-
-      await updatePrinter({
-        ...printer,
-        tonerLevels: updatedTonerLevels,
-        hasTonerTracking: true,
-      });
+      await replacePrinterToner(printer, color, replacementData);
 
       await loadPrinters();
 
       Swal.fire({
         title: "Replacement Recorded!",
-        text: `${color} toner has been replaced successfully.`,
+        text: `${color} toner was replaced and 1 cartridge was deducted from stock.`,
         icon: "success",
         timer: 2000,
         showConfirmButton: false,
@@ -159,7 +130,9 @@ export default function Printers() {
     } catch (error) {
       Swal.fire({
         title: "Error",
-        text: "Failed to record replacement. Please try again.",
+        text: error instanceof TonerStockError
+          ? error.message
+          : "Failed to record replacement. No stock changes were saved; please try again.",
         icon: "error",
       });
     }
@@ -364,7 +337,7 @@ export default function Printers() {
   );
 }
 
-function Card({ title, value, green, yellow, red }: any) {
+function Card({ title, value, green, yellow, red }: { title: string; value: string | number; green?: boolean; yellow?: boolean; red?: boolean }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5">
       <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
@@ -489,4 +462,3 @@ function TonerLevelBadge({ toner, printerModel }: { toner: TonerLevel; printerMo
     </div>
   );
 }
-

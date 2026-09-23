@@ -4,6 +4,20 @@
 // src/utils/notificationHelper.ts
 
 import { createNotification, getNotifications } from "../services/notificationService";
+import type { A4Sheet } from "../types/A4Sheet";
+import type { InternetUsage } from "../types/InternetUsage";
+import type { Gadget } from "../types/gadget";
+
+/** Minimum shape required by checkAndNotifyTonerLevel. Compatible with both Toner and Printer. */
+interface TonerLike {
+  id: string;
+  quantity: number;
+  initialQuantity?: number;
+  colorType?: string;
+  location?: string;
+  printerType?: string;
+  tonerType?: string;
+}
 
 export async function addNotification(
   type: "toner" | "gadget" | "internet" | "a4_sheet",
@@ -50,7 +64,7 @@ export async function addNotification(
 
 // Helper to check and notify for low toner
 export async function checkAndNotifyTonerLevel(
-  toner: any,
+  toner: TonerLike,
   threshold: number = 20
 ) {
   try {
@@ -88,7 +102,7 @@ export async function checkAndNotifyTonerLevel(
 }
 
 // Helper to check and notify for low A4 sheet stock
-export async function checkAndNotifyA4SheetStock(sheet: any, threshold: number = 10) {
+export async function checkAndNotifyA4SheetStock(sheet: A4Sheet, threshold: number = 10) {
   try {
     if (sheet.currentQuantity <= threshold && sheet.currentQuantity > 0) {
       const severity = sheet.currentQuantity <= 5 ? "critical" : "low";
@@ -109,7 +123,7 @@ export async function checkAndNotifyA4SheetStock(sheet: any, threshold: number =
 
 // Helper to check and notify for internet expiration
 export async function checkAndNotifyInternetExpiration(
-  usage: any,
+  usage: InternetUsage,
   daysThreshold: number = 7
 ) {
   try {
@@ -178,7 +192,7 @@ export async function checkAndNotifyInternetExpiration(
 
 // Helper to check and notify for gadget stock
 export async function checkAndNotifyGadgetStock(
-  gadget: any,
+  gadget: Gadget,
   threshold: number = 5
 ) {
   try {

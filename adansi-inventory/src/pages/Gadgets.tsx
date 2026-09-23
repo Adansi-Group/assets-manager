@@ -6,7 +6,7 @@
 
 // src/pages/Gadgets.tsx - WITH BEAUTIFUL DETAILS MODAL FOR ALL TYPES
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getGadgets, addGadget, updateGadget, deleteGadget } from "../services/gadgetsService";
 import type { Gadget, GadgetStatus } from "../types/gadget";
 import AddGadgetModal from "../components/AddGadgetModal";
@@ -14,10 +14,13 @@ import Pagination from "../components/Pagination";
 import { Plus, Search, Trash2, Eye, MonitorSmartphone, Edit } from "lucide-react";
 import Swal from "sweetalert2";
 import ExportDropdown from "../components/ExportDropdown";
+import {
+  buildInUseAssignmentExport,
+  inUseAssignmentExportColumns,
+} from "../utils/inUseAssignmentExport";
 
 export default function Gadgets() {
   const [gadgets, setGadgets] = useState<Gadget[]>([]);
-  const [filteredGadgets, setFilteredGadgets] = useState<Gadget[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<GadgetStatus | "All">("All");
@@ -31,10 +34,6 @@ export default function Gadgets() {
   useEffect(() => {
     loadGadgets();
   }, []);
-
-  useEffect(() => {
-    filterGadgets();
-  }, [gadgets, searchQuery, statusFilter]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -53,7 +52,7 @@ export default function Gadgets() {
     }
   }
 
-  function filterGadgets() {
+  const filteredGadgets = useMemo(() => {
     let filtered = gadgets;
 
     // Filter by status
@@ -74,8 +73,8 @@ export default function Gadgets() {
       );
     }
 
-    setFilteredGadgets(filtered);
-  }
+    return filtered;
+  }, [gadgets, searchQuery, statusFilter]);
 
   async function handleAddGadget(data: Omit<Gadget, "id"> | Gadget) {
     try {
@@ -143,6 +142,11 @@ export default function Gadgets() {
   const endIndex = startIndex + itemsPerPage;
   const paginatedData = filteredGadgets.slice(startIndex, endIndex);
 
+  const assignmentExportData = useMemo(
+    () => buildInUseAssignmentExport(filteredGadgets),
+    [filteredGadgets]
+  );
+
   // Prepare export data with conditional columns
   const getExportColumns = () => {
     const baseColumns = [
@@ -196,9 +200,12 @@ export default function Gadgets() {
         </div>
         <div className="flex gap-3">
           <ExportDropdown
-            data={filteredGadgets}
-            filename={`Gadgets_${statusFilter}_${new Date().toISOString().split('T')[0]}`}
-            columns={getExportColumns()}
+            data={statusFilter === "In-Use" ? assignmentExportData : filteredGadgets}
+            filename={statusFilter === "In-Use"
+              ? `In_Use_Assignments_${new Date().toISOString().split('T')[0]}`
+              : `Gadgets_${statusFilter}_${new Date().toISOString().split('T')[0]}`}
+            columns={statusFilter === "In-Use" ? inUseAssignmentExportColumns : getExportColumns()}
+            label={statusFilter === "In-Use" ? "Download assignments" : "Export"}
           />
           <button
             onClick={() => setShowAddModal(true)}

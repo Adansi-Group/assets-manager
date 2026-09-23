@@ -1,79 +1,181 @@
-
-
-
-import { useState, useEffect } from "react";
-import { Download, DollarSign, TrendingUp, Calendar, PieChart } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Download, DollarSign, TrendingUp, Calendar, PieChart, Package } from "lucide-react";
 import { getToners } from "../services/tonerService";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
+import { getGadgets } from "../services/gadgetsService";
+import { getPrinters } from "../services/printerService";
+import { getInventoryItems } from "../services/inventoryService";
+import { getAllReplacements } from "../services/Tonerreplacementservice";
+import type { Toner, TonerReplacement } from "../types/toner";
+import type { A4Sheet } from "../types/A4Sheet";
+import type { InternetUsage } from "../types/InternetUsage";
+import type { Gadget } from "../types/gadget";
+import type { Printer } from "../types/printer";
+import type { InventoryItem } from "../types/inventory";
+import { inRange, resolveRange, toISODate, type Quarter } from "../reports/shared/period";
+
+// ---- Component --------------------------------------------------------------
+
+interface AllData {
+  toners: Toner[];
+  a4Sheets: A4Sheet[];
+  internet: InternetUsage[];
+  gadgets: Gadget[];
+  printers: Printer[];
+  inventory: InventoryItem[];
+  replacements: TonerReplacement[];
+}
+
+const EMPTY: AllData = {
+  toners: [],
+  a4Sheets: [],
+  internet: [],
+  gadgets: [],
+  printers: [],
+  inventory: [],
+  replacements: [],
+};
 
 export default function ConsolidatedReport() {
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState({
-    toners: [] as any[],
-    a4Sheets: [] as any[],
-    internet: [] as any[],
-  });
+  const [data, setData] = useState<AllData>(EMPTY);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Period controls — default to the current quarter/year, common reporting need.
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentQuarter = (["Q1", "Q2", "Q3", "Q4"] as const)[Math.floor(now.getMonth() / 3)];
+  const [year, setYear] = useState<number>(currentYear);
+  const [quarter, setQuarter] = useState<Quarter>(currentQuarter);
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+
+  const range = useMemo(
+    () => resolveRange(year, quarter, customStart, customEnd),
+    [year, quarter, customStart, customEnd]
+  );
 
   async function loadData() {
     setLoading(true);
-    const [toners, sheets, internet] = await Promise.all([
-      getToners(),
-      getA4Sheets(),
-      getInternetUsage(),
-    ]);
-    setData({ toners, a4Sheets: sheets, internet });
+    const [toners, a4Sheets, internet, gadgets, printers, inventory, replacements] =
+      await Promise.all([
+        getToners(),
+        getA4Sheets(),
+        getInternetUsage(),
+        getGadgets(),
+        getPrinters(),
+        getInventoryItems(),
+        getAllReplacements(),
+      ]);
+    setData({ toners, a4Sheets, internet, gadgets, printers, inventory, replacements });
     setLoading(false);
   }
 
-  // Calculate totals
-  const totals = {
-    toners: {
-      count: data.toners.length,
-      cost: data.toners.reduce((sum, t) => sum + (t.quantity * (t.costPerUnit || 0)), 0),
-    },
-    a4Sheets: {
-      count: data.a4Sheets.reduce((sum, s) => sum + s.currentQuantity, 0),
-      cost: data.a4Sheets.reduce((sum, s) => sum + s.currentQuantity * s.costPerReam, 0),
-    },
-    internet: {
-      count: data.internet.filter((i) => i.status === "Active").length,
-      cost: data.internet.reduce((sum, i) => sum + (i.cost || 0), 0),
-    },
-  };
+  useEffect(() => {
+    void loadData();
+  }, []);
 
-  const grandTotal =
-    totals.toners.cost + totals.a4Sheets.cost + totals.internet.cost;
+  // ---- Period-filtered metrics ----------------------------------------------
+  const m = useMemo(() => {
+    // Toners acquired within the period
+    const toners = data.toners.filter((t) => inRange(toISODate(t.dateBrought), range));
+    const tonerUnits = toners.reduce((s, t) => s + (t.quantity || 0), 0);
+    const tonerCost = toners.reduce((s, t) => s + (t.quantity || 0) * (t.costPerUnit || 0), 0);
 
-  function exportPDF() {
-    console.log("Exporting consolidated PDF...");
-    // TODO: Implement PDF export with charts
-  }
+    // Toner replacements performed within the period
+    const replacements = data.replacements.filter((r) =>
+      inRange(toISODate(r.dateReplaced), range)
+    );
+
+    // A4 restock/add events within the period
+    const a4Events = data.a4Sheets.filter(
+      (s) => inRange(toISODate(s.lastRestocked), range) || inRange(toISODate(s.dateAdded), range)
+    );
+    const a4ReamsAdded = a4Events.reduce((s, r) => s + (r.initialQuantity || 0), 0);
+    const a4PeriodSpend = a4Events.reduce(
+      (s, r) => s + (r.initialQuantity || 0) * (r.costPerReam || 0),
+      0
+    );
+    // Snapshot value (not period-specific)
+    const a4StockValue = data.a4Sheets.reduce(
+      (s, r) => s + (r.currentQuantity || 0) * (r.costPerReam || 0),
+      0
+    );
+    const a4StockReams = data.a4Sheets.reduce((s, r) => s + (r.currentQuantity || 0), 0);
+
+    // Internet purchased within the period
+    const internet = data.internet.filter((i) => inRange(toISODate(i.datePurchased), range));
+    const internetCost = internet.reduce((s, i) => s + (i.cost || 0), 0);
+
+    // Gadgets purchased within the period
+    const gadgets = data.gadgets.filter((g) => inRange(toISODate(g.purchaseDate), range));
+    const gadgetByType = { Laptop: 0, Smartphone: 0, Accessory: 0 } as Record<string, number>;
+    const gadgetByStatus = { "In-Use": 0, "In-Stock": 0, Faulty: 0 } as Record<string, number>;
+    gadgets.forEach((g) => {
+      gadgetByType[g.deviceType] = (gadgetByType[g.deviceType] || 0) + 1;
+      gadgetByStatus[g.status] = (gadgetByStatus[g.status] || 0) + 1;
+    });
+
+    // Printers added within the period
+    const printers = data.printers.filter((p) => inRange(toISODate(p.date), range));
+    const printerUnits = printers.reduce((s, p) => s + (p.quantity || 0), 0);
+
+    // Inventory added within the period
+    const inventory = data.inventory.filter((i) => inRange(toISODate(i.createdAt), range));
+    const inventoryUnits = inventory.reduce((s, i) => s + (i.quantity || 0), 0);
+
+    const knownSpend = tonerCost + a4PeriodSpend + internetCost;
+
+    return {
+      toners,
+      tonerUnits,
+      tonerCost,
+      replacements,
+      a4Events,
+      a4ReamsAdded,
+      a4PeriodSpend,
+      a4StockValue,
+      a4StockReams,
+      internet,
+      internetCost,
+      gadgets,
+      gadgetByType,
+      gadgetByStatus,
+      printers,
+      printerUnits,
+      inventory,
+      inventoryUnits,
+      knownSpend,
+    };
+  }, [data, range]);
 
   function exportExcel() {
-    const csv = [
-      ["CONSOLIDATED EXPENSE REPORT"],
+    const rows: (string | number)[][] = [
+      ["CONSOLIDATED REPORT"],
+      ["Period:", range.label],
       ["Generated:", new Date().toLocaleString()],
       [""],
-      ["Category", "Items", "Total Cost"],
-      ["Toners", totals.toners.count, `GH₵${totals.toners.cost.toFixed(2)}`],
-      ["A4 Sheets", `${totals.a4Sheets.count} reams`, `GH₵${totals.a4Sheets.cost.toFixed(2)}`],
-      ["Internet", totals.internet.count, `GH₵${totals.internet.cost.toFixed(2)}`],
+      ["Category", "Items in period", "Units", "Known cost (GH₵)"],
+      ["Toners acquired", m.toners.length, m.tonerUnits, m.tonerCost.toFixed(2)],
+      ["Toner replacements", m.replacements.length, "", ""],
+      ["A4 sheet restocks", m.a4Events.length, m.a4ReamsAdded, m.a4PeriodSpend.toFixed(2)],
+      ["Internet purchases", m.internet.length, "", m.internetCost.toFixed(2)],
+      ["Gadgets acquired", m.gadgets.length, "", ""],
+      ["  – Laptops", m.gadgetByType.Laptop, "", ""],
+      ["  – Smartphones", m.gadgetByType.Smartphone, "", ""],
+      ["  – Accessories", m.gadgetByType.Accessory, "", ""],
+      ["Printers added", m.printers.length, m.printerUnits, ""],
+      ["Inventory added", m.inventory.length, m.inventoryUnits, ""],
       [""],
-      ["GRAND TOTAL", "", `GH₵${grandTotal.toFixed(2)}`],
-    ]
-      .map((r) => r.join(","))
-      .join("\n");
-
+      ["KNOWN CASH SPEND (period)", "", "", m.knownSpend.toFixed(2)],
+      ["A4 stock value on hand (snapshot)", `${m.a4StockReams} reams`, "", m.a4StockValue.toFixed(2)],
+    ];
+    const csv = rows.map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `consolidated-report-${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `consolidated-report-${range.label.replace(/[^\w]+/g, "-")}.csv`;
     a.click();
   }
 
@@ -85,207 +187,281 @@ export default function ConsolidatedReport() {
     );
   }
 
+  const yearOptions = Array.from({ length: 6 }, (_, i) => currentYear - i);
+
   return (
     <div className="p-6 space-y-6 bg-gray-100 dark:bg-gray-900">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Consolidated Report
-          </h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Consolidated Report</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Complete overview of all expenses and inventory
+            Asset activity and expenses for a selected period
           </p>
         </div>
-
-        <div className="flex gap-3">
-          <button
-            onClick={exportExcel}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-          >
-            <Download size={18} />
-            Export CSV
-          </button>
-
-          <button
-            onClick={exportPDF}
-            className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
-          >
-            <Download size={18} />
-            Export PDF
-          </button>
-        </div>
+        <button
+          onClick={exportExcel}
+          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+        >
+          <Download size={18} />
+          Export CSV
+        </button>
       </div>
 
-      {/* Grand Total Card */}
+      {/* Period selector */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 flex flex-wrap items-center gap-3">
+        <Calendar size={18} className="text-green-600" />
+        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Period:</span>
+        <div className="flex flex-wrap gap-1">
+          {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => (
+            <button
+              key={q}
+              onClick={() => setQuarter(q)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                quarter === q
+                  ? "bg-green-600 text-white"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+              }`}
+            >
+              {q}
+            </button>
+          ))}
+          <button
+            onClick={() => setQuarter("ALL")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              quarter === "ALL"
+                ? "bg-green-600 text-white"
+                : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+            }`}
+          >
+            All time
+          </button>
+        </div>
+        <select
+          value={year}
+          onChange={(e) => setYear(Number(e.target.value))}
+          disabled={quarter === "ALL" || quarter === "CUSTOM"}
+          className="px-3 py-1.5 rounded-lg text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
+        >
+          {yearOptions.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setQuarter("CUSTOM")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              quarter === "CUSTOM"
+                ? "bg-green-600 text-white"
+                : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+            }`}
+          >
+            Custom
+          </button>
+          <input
+            type="date"
+            value={customStart}
+            onChange={(e) => {
+              setCustomStart(e.target.value);
+              setQuarter("CUSTOM");
+            }}
+            className="px-2 py-1.5 rounded-lg text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+          />
+          <span className="text-gray-400">→</span>
+          <input
+            type="date"
+            value={customEnd}
+            onChange={(e) => {
+              setCustomEnd(e.target.value);
+              setQuarter("CUSTOM");
+            }}
+            className="px-2 py-1.5 rounded-lg text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+          />
+        </div>
+        <span className="ml-auto text-sm font-semibold text-green-700 dark:text-green-400">
+          Showing: {range.label}
+        </span>
+      </div>
+
+      {/* Known cash spend card */}
       <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-xl shadow-2xl p-8 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-green-100 mb-2">Total Expenses (All Categories)</p>
-            <p className="text-5xl font-bold">GH₵{grandTotal.toFixed(2)}</p>
-            <p className="text-green-100 mt-2">
-              Period: {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-            </p>
+            <p className="text-green-100 mb-2">Known Cash Spend (period, where cost is recorded)</p>
+            <p className="text-5xl font-bold">GH₵{m.knownSpend.toFixed(2)}</p>
+            <p className="text-green-100 mt-2">Period: {range.label}</p>
           </div>
           <DollarSign size={80} className="text-green-200 opacity-50" />
         </div>
       </div>
 
-      {/* Category Breakdown */}
+      {/* Data coverage note */}
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-sm text-amber-800 dark:text-amber-300">
+        <strong>Note:</strong> Purchase cost is only recorded for A4 sheets and internet bundles
+        (and toners when a unit cost is entered). Gadgets, printers and inventory are tracked by
+        quantity, not cost — so the figures below are primarily <em>asset activity</em> for the
+        period, and “Known Cash Spend” reflects only categories that carry cost data.
+      </div>
+
+      {/* Consumables (cost-bearing) */}
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+        <DollarSign size={20} className="text-green-600" /> Consumables (cost tracked)
+      </h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Toners */}
-        <CategoryCard
-          title="Toners"
-          count={totals.toners.count}
-          cost={totals.toners.cost}
-          percentage={(totals.toners.cost / grandTotal) * 100}
-          color="bg-blue-600"
+        <MetricCard
+          title="Toners acquired"
           icon="💧"
+          primary={`${m.toners.length}`}
+          primaryLabel="records"
+          secondary={`${m.tonerUnits} units · GH₵${m.tonerCost.toFixed(2)}`}
+          extra={`${m.replacements.length} replacements in period`}
+          color="bg-blue-600"
         />
-
-        {/* A4 Sheets */}
-        <CategoryCard
+        <MetricCard
           title="A4 Sheets"
-          count={`${totals.a4Sheets.count} reams`}
-          cost={totals.a4Sheets.cost}
-          percentage={(totals.a4Sheets.cost / grandTotal) * 100}
-          color="bg-orange-600"
           icon="📄"
+          primary={`${m.a4Events.length}`}
+          primaryLabel="restock/add events"
+          secondary={`${m.a4ReamsAdded} reams · GH₵${m.a4PeriodSpend.toFixed(2)}`}
+          extra={`Stock on hand: ${m.a4StockReams} reams (GH₵${m.a4StockValue.toFixed(2)})`}
+          color="bg-orange-600"
         />
-
-        {/* Internet */}
-        <CategoryCard
-          title="Internet Usage"
-          count={`${totals.internet.count} active`}
-          cost={totals.internet.cost}
-          percentage={(totals.internet.cost / grandTotal) * 100}
-          color="bg-green-600"
+        <MetricCard
+          title="Internet purchases"
           icon="📡"
+          primary={`${m.internet.length}`}
+          primaryLabel="purchases"
+          secondary={`GH₵${m.internetCost.toFixed(2)}`}
+          extra={m.internet.map((i) => `${i.officeName} · ${i.provider}`).slice(0, 2).join(" | ") || "—"}
+          color="bg-green-600"
         />
       </div>
 
-      {/* Visual Breakdown */}
+      {/* Assets (quantity tracked) */}
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+        <Package size={20} className="text-green-600" /> Asset acquisitions (quantity tracked)
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <MetricCard
+          title="Gadgets acquired"
+          icon="💻"
+          primary={`${m.gadgets.length}`}
+          primaryLabel="devices"
+          secondary={`${m.gadgetByType.Laptop} laptops · ${m.gadgetByType.Smartphone} phones · ${m.gadgetByType.Accessory} accessories`}
+          extra={`${m.gadgetByStatus["In-Use"]} in-use · ${m.gadgetByStatus["In-Stock"]} in-stock · ${m.gadgetByStatus.Faulty} faulty`}
+          color="bg-teal-600"
+        />
+        <MetricCard
+          title="Printers added"
+          icon="🖨️"
+          primary={`${m.printers.length}`}
+          primaryLabel="records"
+          secondary={`${m.printerUnits} units`}
+          extra={m.printers.map((p) => p.location).slice(0, 2).join(" | ") || "—"}
+          color="bg-indigo-600"
+        />
+        <MetricCard
+          title="Inventory added"
+          icon="📦"
+          primary={`${m.inventory.length}`}
+          primaryLabel="records"
+          secondary={`${m.inventoryUnits} units`}
+          extra={m.inventory.map((i) => i.itemName).slice(0, 2).join(" | ") || "—"}
+          color="bg-purple-600"
+        />
+      </div>
+
+      {/* Gadget type distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Cost Distribution */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
             <PieChart size={24} className="text-green-600" />
-            Cost Distribution
+            Gadget mix ({range.label})
           </h2>
-
           <div className="space-y-4">
-            <DistributionBar
-              label="Toners"
-              value={totals.toners.cost}
-              percentage={(totals.toners.cost / grandTotal) * 100}
-              color="bg-blue-600"
-            />
-            <DistributionBar
-              label="A4 Sheets"
-              value={totals.a4Sheets.cost}
-              percentage={(totals.a4Sheets.cost / grandTotal) * 100}
-              color="bg-orange-600"
-            />
-            <DistributionBar
-              label="Internet"
-              value={totals.internet.cost}
-              percentage={(totals.internet.cost / grandTotal) * 100}
-              color="bg-green-600"
-            />
+            {(["Laptop", "Smartphone", "Accessory"] as const).map((t) => {
+              const val = m.gadgetByType[t] || 0;
+              const pct = m.gadgets.length ? (val / m.gadgets.length) * 100 : 0;
+              return (
+                <DistributionBar
+                  key={t}
+                  label={t === "Accessory" ? "Accessories" : `${t}s`}
+                  valueText={`${val} (${pct.toFixed(0)}%)`}
+                  percentage={pct}
+                  color={t === "Laptop" ? "bg-teal-600" : t === "Smartphone" ? "bg-blue-600" : "bg-orange-500"}
+                />
+              );
+            })}
           </div>
         </div>
 
-        {/* Monthly Comparison */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
             <TrendingUp size={24} className="text-green-600" />
-            Monthly Trend
+            Toner replacements by location ({range.label})
           </h2>
-
-          <div className="text-center py-12">
-            <Calendar size={64} className="mx-auto text-gray-300 dark:text-gray-600 mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">
-              Historical data will appear here
-            </p>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-              Track month-over-month spending patterns
-            </p>
-          </div>
+          <SummaryTable
+            items={Object.entries(
+              m.replacements.reduce<Record<string, number>>((acc, r) => {
+                acc[r.location || "Unknown"] = (acc[r.location || "Unknown"] || 0) + 1;
+                return acc;
+              }, {})
+            )
+              .map(([name, v]) => ({ name, value: String(v) }))
+              .sort((a, b) => Number(b.value) - Number(a.value))}
+            emptyText="No replacements in this period"
+          />
         </div>
-      </div>
-
-      {/* Summary Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Top Toner Expenses */}
-        <SummaryTable
-          title="Top Toner Expenses"
-          items={data.toners
-            .map((t) => ({
-              name: `${t.location} - ${t.colorType}`,
-              value: (t.quantity * (t.costPerUnit || 0)).toFixed(2),
-            }))
-            .sort((a, b) => Number(b.value) - Number(a.value))
-            .slice(0, 5)}
-        />
-
-        {/* A4 Sheet Usage */}
-        <SummaryTable
-          title="A4 Sheet Stock Value"
-          items={data.a4Sheets
-            .map((s) => ({
-              name: s.officeName,
-              value: (s.currentQuantity * s.costPerReam).toFixed(2),
-            }))
-            .sort((a, b) => Number(b.value) - Number(a.value))
-            .slice(0, 5)}
-        />
-
-        {/* Internet Costs */}
-        <SummaryTable
-          title="Internet Expenses"
-          items={data.internet
-            .filter((i) => i.cost)
-            .map((i) => ({
-              name: `${i.officeName} - ${i.provider}`,
-              value: i.cost.toFixed(2),
-            }))
-            .sort((a, b) => Number(b.value) - Number(a.value))
-            .slice(0, 5)}
-        />
       </div>
     </div>
   );
 }
 
-function CategoryCard({ title, count, cost, percentage, color, icon }: any) {
+// ---- Sub-components ---------------------------------------------------------
+
+interface MetricCardProps {
+  title: string;
+  icon: string;
+  primary: string;
+  primaryLabel: string;
+  secondary: string;
+  extra: string;
+  color: string;
+}
+
+function MetricCard({ title, icon, primary, primaryLabel, secondary, extra, color }: MetricCardProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
         <span className="text-3xl">{icon}</span>
       </div>
-      <p className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-        GH₵{cost.toFixed(2)}
-      </p>
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{count}</p>
-      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-        <div className={`h-2 rounded-full ${color}`} style={{ width: `${percentage}%` }}></div>
+      <div className="flex items-baseline gap-2 mb-1">
+        <p className="text-4xl font-bold text-gray-900 dark:text-white">{primary}</p>
+        <span className="text-sm text-gray-500 dark:text-gray-400">{primaryLabel}</span>
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-        {percentage.toFixed(1)}% of total
-      </p>
+      <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">{secondary}</p>
+      <div className={`h-1 w-16 rounded-full ${color} mb-2`}></div>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{extra}</p>
     </div>
   );
 }
 
-function DistributionBar({ label, value, percentage, color }: any) {
+interface DistributionBarProps {
+  label: string;
+  valueText: string;
+  percentage: number;
+  color: string;
+}
+
+function DistributionBar({ label, valueText, percentage, color }: DistributionBarProps) {
   return (
     <div>
       <div className="flex justify-between items-center mb-2">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          GH₵{value.toFixed(2)} ({percentage.toFixed(1)}%)
-        </span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">{valueText}</span>
       </div>
       <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
         <div className={`h-4 rounded-full ${color}`} style={{ width: `${percentage}%` }}></div>
@@ -294,24 +470,27 @@ function DistributionBar({ label, value, percentage, color }: any) {
   );
 }
 
-function SummaryTable({ title, items }: any) {
+interface SummaryItem {
+  name: string;
+  value: string;
+}
+
+function SummaryTable({ items, emptyText }: { items: SummaryItem[]; emptyText: string }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">{title}</h3>
-      <div className="space-y-3">
-        {items.length === 0 ? (
-          <p className="text-center text-gray-400 dark:text-gray-500 py-4 text-sm">No data</p>
-        ) : (
-          items.map((item: any, idx: number) => (
-            <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700 last:border-0">
-              <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{item.name}</span>
-              <span className="text-sm font-semibold text-gray-900 dark:text-white ml-2">
-                GH₵{item.value}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
+    <div className="space-y-3">
+      {items.length === 0 ? (
+        <p className="text-center text-gray-400 dark:text-gray-500 py-4 text-sm">{emptyText}</p>
+      ) : (
+        items.map((item, idx) => (
+          <div
+            key={idx}
+            className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700 last:border-0"
+          >
+            <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{item.name}</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-white ml-2">{item.value}</span>
+          </div>
+        ))
+      )}
     </div>
   );
 }

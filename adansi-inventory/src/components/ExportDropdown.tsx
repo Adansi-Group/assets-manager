@@ -8,14 +8,31 @@ import { Download, FileSpreadsheet, FileText, File } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { toISODate } from "../reports/shared/period";
 
 interface Props {
-  data: any[];
+  data: Record<string, unknown>[];
   filename: string;
   columns: { key: string; label: string }[];
+  label?: string;
 }
 
-export default function ExportDropdown({ data, filename, columns }: Props) {
+/**
+ * Render one cell value for export.
+ *
+ * Numbers pass through unwrapped so Excel still treats them as numeric — which
+ * is why this returns `string | number` rather than always stringifying. The
+ * `0`/`false` cases matter: `||` would blank them out.
+ */
+function toCell(value: unknown): string | number {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? value : "";
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return toISODate(value) ?? String(value);
+}
+
+export default function ExportDropdown({ data, filename, columns, label = "Export" }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -33,9 +50,9 @@ export default function ExportDropdown({ data, filename, columns }: Props) {
   const exportToExcel = () => {
     // Prepare data
     const exportData = data.map(item => {
-      const row: any = {};
+      const row: Record<string, unknown> = {};
       columns.forEach(col => {
-        row[col.label] = item[col.key] || "";
+        row[col.label] = toCell(item[col.key]);
       });
       return row;
     });
@@ -58,8 +75,8 @@ export default function ExportDropdown({ data, filename, columns }: Props) {
     doc.text(filename, 14, 15);
     
     // Prepare table data
-    const tableData = data.map(item => 
-      columns.map(col => item[col.key] || "")
+    const tableData = data.map(item =>
+      columns.map(col => String(toCell(item[col.key])))
     );
     
     // Create table
@@ -78,30 +95,26 @@ export default function ExportDropdown({ data, filename, columns }: Props) {
 
   const exportToCSV = () => {
     // Prepare CSV content
-    const headers = columns.map(col => col.label).join(",");
-    const rows = data.map(item =>
-      columns.map(col => {
-        const value = item[col.key] || "";
-        // Escape commas and quotes
-        return `"${String(value).replace(/"/g, '""')}"`;
-      }).join(",")
-    );
+    const escape = (value: unknown) => `"${String(toCell(value)).replace(/"/g, '""')}"`;
+    const headers = columns.map(col => escape(col.label)).join(",");
+    const rows = data.map(item => columns.map(col => escape(item[col.key])).join(","));
 
     const csvContent = [headers, ...rows].join("\n");
 
-    // Create blob and download
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    // Leading BOM, without which Excel reads the file as Latin-1 and mangles GH₵.
+    const blob = new Blob(["﻿" + csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
-    
+
     link.setAttribute("href", url);
     link.setAttribute("download", `${filename}.csv`);
     link.style.visibility = "hidden";
-    
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+    URL.revokeObjectURL(url);
+
     setIsOpen(false);
   };
 
@@ -112,7 +125,7 @@ export default function ExportDropdown({ data, filename, columns }: Props) {
         className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
       >
         <Download size={20} />
-        Export
+        {label}
       </button>
 
       {isOpen && (

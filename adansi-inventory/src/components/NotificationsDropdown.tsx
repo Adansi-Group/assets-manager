@@ -25,8 +25,17 @@ export default function NotificationsDropdown({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  async function loadNotifications() {
+    setLoading(true);
+    const data = await getNotifications();
+    setNotifications(data);
+    setLoading(false);
+  }
+
   useEffect(() => {
-    loadNotifications();
+    (async () => {
+      await loadNotifications();
+    })();
 
     // Listen for new notifications
     const handleNewNotification = () => {
@@ -39,13 +48,6 @@ export default function NotificationsDropdown({
       window.removeEventListener("notification-added", handleNewNotification);
     };
   }, []);
-
-  async function loadNotifications() {
-    setLoading(true);
-    const data = await getNotifications();
-    setNotifications(data);
-    setLoading(false);
-  }
 
   async function handleMarkAsRead(id: string) {
     await markAsRead(id);

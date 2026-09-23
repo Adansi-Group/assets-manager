@@ -2,26 +2,22 @@
 // src/pages/inventory/InventoryCategory.tsx
 // FIXED VERSION with better error handling and debugging
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   getItemsByCategory,
   addInventoryItem,
-  updateInventoryItem,
   deleteInventoryItem,
   addStock,
   removeStock
 } from "../../services/inventoryService";
 import type { InventoryItem, InventoryCategory } from "../../types/inventory";
-import { INVENTORY_ITEMS_BY_CATEGORY } from "../../types/inventory";
 import AddInventoryItemModal from "../../components/AddInventoryItemModal";
 import {
   Plus,
-  Edit,
   Trash2,
   TrendingUp,
   TrendingDown,
-  Package,
   RefreshCw,
   ArrowLeft
 } from "lucide-react";
@@ -53,25 +49,7 @@ export default function InventoryCategory() {
     console.log("Mapped category name:", categoryName);
   }, [category, categoryName]);
 
-  useEffect(() => {
-    if (!categoryName) {
-      console.error("Invalid category:", category);
-      setLoading(false);
-      Swal.fire({
-        icon: "error",
-        title: "Invalid Category",
-        text: "The category you're trying to access doesn't exist.",
-        confirmButtonColor: "#16a34a"
-      }).then(() => {
-        navigate("/inventory");
-      });
-      return;
-    }
-    
-    loadItems();
-  }, [categoryName]);
-
-  async function loadItems() {
+  const loadItems = useCallback(async () => {
     if (!categoryName) {
       setLoading(false);
       return;
@@ -94,7 +72,25 @@ export default function InventoryCategory() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [categoryName]);
+
+  useEffect(() => {
+    if (!categoryName) {
+      console.error("Invalid category:", category);
+      setLoading(false);
+      Swal.fire({
+        icon: "error",
+        title: "Invalid Category",
+        text: "The category you're trying to access doesn't exist.",
+        confirmButtonColor: "#16a34a"
+      }).then(() => {
+        navigate("/inventory");
+      });
+      return;
+    }
+
+    void loadItems();
+  }, [category, categoryName, loadItems, navigate]);
 
   async function handleAddItem(itemData: Omit<InventoryItem, "id">) {
     try {
@@ -448,5 +444,4 @@ export default function InventoryCategory() {
     </div>
   );
 }
-
 

@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X, TrendingDown, CheckCircle, AlertCircle } from "lucide-react";
-import type { Printer, TonerLevel, TonerColor } from "../types/printer";
+import type { Printer } from "../types/printer";
 
 type Props = {
   onClose: () => void;
@@ -14,27 +14,18 @@ type Props = {
   selectedColor?: string;
 };
 
+const todayString = () => new Date().toISOString().split("T")[0];
+
 export default function ReplaceTonerModal({ onClose, onSave, printer, selectedColor }: Props) {
-  const [color, setColor] = useState<string>(selectedColor || "");
-  const [dateChecked, setDateChecked] = useState("");
-  const [dateReplaced, setDateReplaced] = useState("");
-  const [previousPercentage, setPreviousPercentage] = useState<number>(20);
-  const [currentPercentage, setCurrentPercentage] = useState<number>(100);
+  const color = selectedColor || "";
+  const initialDate = todayString();
 
   // Get current toner level for selected color
   const currentToner = printer.tonerLevels?.find(t => t.color === color);
-
-  useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    setDateChecked(today);
-    setDateReplaced(today);
-  }, []);
-
-  useEffect(() => {
-    if (color && currentToner) {
-      setPreviousPercentage(currentToner.currentPercentage);
-    }
-  }, [color, currentToner]);
+  const [dateChecked, setDateChecked] = useState(initialDate);
+  const [dateReplaced, setDateReplaced] = useState(initialDate);
+  const [previousPercentage, setPreviousPercentage] = useState<number>(() => currentToner?.currentPercentage ?? 20);
+  const [currentPercentage, setCurrentPercentage] = useState<number>(100);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
