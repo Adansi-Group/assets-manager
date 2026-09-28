@@ -160,6 +160,19 @@ Authentication → Settings → Authorized domains → Add domain → the Vercel
 - Delete the `admin@test.com` account in Authentication.
 - Optional: delete the four Gmail accounts in Authentication. They can't get in either way.
 
+## If someone is refused and you don't know why
+
+On the login page open the browser console (Cmd + Option + J), have them sign in again, and read the
+yellow `Access refused:` line:
+
+| It says | Meaning | Fix |
+|---|---|---|
+| `membersEntry: 'missing'` | No `members` document has `emailFirebaseReported` as its id | Add them on the Users page, or fix the id |
+| `emailFirebaseReported` is an old address | Firebase kept the email from when the account was created | Delete that account in Authentication; they sign in again |
+| `reason: 'unverified'` | A password sign-in without `passwordSignIn: true`, or a provider other than Google | See "What changed from the spec" above |
+| `reason: 'bad-entry'` | The role in their entry is not one of the four | Edit them on the Users page and pick a role |
+| `reason: 'lookup-failed'` | The list could not be read (network, or rules) | Try again; check the rules were published whole |
+
 ## Adding someone later
 
 Users page → Add. They sign in with the Google account for that email; nothing to do in the console.

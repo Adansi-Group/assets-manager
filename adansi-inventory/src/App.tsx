@@ -64,6 +64,15 @@ export default function App() {
       if (mySeq !== seq) return;
       const decision = decideAccess(fbUser.email, lookup, signIn);
       if (!decision.allowed) {
+        // The login page says only "no access"; the console says why, using
+        // nothing but the person's own sign-in.
+        console.warn("Access refused:", {
+          reason: decision.reason,
+          emailFirebaseReported: fbUser.email,
+          membersEntry: lookup.status,
+          provider: signIn?.provider ?? null,
+          emailVerified: signIn?.emailVerified ?? null,
+        });
         setNotice(refusalMessage(decision.reason));
         setCurrentUser(null);
         await signOut(auth);
