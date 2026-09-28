@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findPoolCollisions, groupPools, selectedPool, usedByLabel } from "./poolRows";
+import { findPoolCollisions, groupPools, officesLabel, selectedPool, usedByLabel } from "./poolRows";
 import type { TonerStock } from "../types/toner";
 import type { Printer } from "../types/printer";
 
@@ -148,5 +148,25 @@ describe("usedByLabel", () => {
 
   it("says N printers, plural", () => {
     expect(usedByLabel(3)).toBe("3 printers");
+  });
+});
+
+describe("officesLabel", () => {
+  it("lists each printer's location, with its room in brackets when it has one", () => {
+    const label = officesLabel([
+      printer({ id: "ceo", location: "Travel House", room: "CEO's Office" }),
+      printer({ id: "coo", location: "Travel House", room: "COO's Office" }),
+      printer({ id: "tema", location: "Tema Branch" }),
+    ]);
+
+    expect(label).toBe("Travel House (CEO's Office), Travel House (COO's Office), Tema Branch");
+  });
+
+  it("shows just the location when a printer has no room", () => {
+    expect(officesLabel([printer({ id: "tema", location: "Tema Branch" })])).toBe("Tema Branch");
+  });
+
+  it("says plainly that no printers are assigned rather than printing an empty list", () => {
+    expect(officesLabel([])).toBe("No printers assigned");
   });
 });

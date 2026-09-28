@@ -22,7 +22,7 @@ import { buildStationReport } from "../reports/station/model";
 import { narrateStation } from "../reports/station/narrate";
 import { getToners } from "../services/tonerService";
 import { getTonerStock } from "../services/tonerStockService";
-import { getPrinters } from "../services/printerService";
+import { getPrintersStrict } from "../services/printerService";
 import { getTonerReorderLevel } from "../services/notificationService";
 import { getAllReplacements } from "../services/Tonerreplacementservice";
 import { getA4Sheets } from "../services/a4SheetService";
@@ -93,7 +93,7 @@ export default function Reports() {
       const [t, st, p, r, s, i, g, level] = await Promise.all([
         getToners(),
         getTonerStock(),
-        getPrinters(),
+        getPrintersStrict(),
         getAllReplacements(),
         getA4Sheets(),
         getInternetUsage(),

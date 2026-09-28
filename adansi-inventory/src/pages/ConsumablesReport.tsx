@@ -3,13 +3,13 @@ import { AlertTriangle, Download, FileText, Timer, Droplets, PackageCheck, FileT
 import { getTonerStock } from "../services/tonerStockService";
 import { getAllReplacements } from "../services/Tonerreplacementservice";
 import { getA4Sheets } from "../services/a4SheetService";
-import { getPrinters } from "../services/printerService";
+import { getPrintersStrict } from "../services/printerService";
 import type { TonerStock, TonerReplacement } from "../types/toner";
 import type { A4Sheet } from "../types/A4Sheet";
 import type { Printer } from "../types/printer";
 import { buildConsumablesModel } from "../reports/consumables/model";
 import { printersUsing } from "../toners/pools";
-import { usedByLabel } from "../toners/poolRows";
+import { officesLabel, usedByLabel } from "../toners/poolRows";
 import { DocBuilder } from "../reports/shared/pdf/docBuilder";
 import { downloadConsumablesDocx } from "../reports/consumables/renderDocx";
 
@@ -29,7 +29,7 @@ export default function ConsumablesReport() {
         getTonerStock(),
         getAllReplacements(),
         getA4Sheets(),
-        getPrinters(),
+        getPrintersStrict(),
       ]);
       setToners(t); setReplacements(r); setSheets(s); setPrinters(p);
     } catch (e) {
@@ -46,12 +46,7 @@ export default function ConsumablesReport() {
   useEffect(() => { void loadData(); }, [loadData]);
   const model = useMemo(() => buildConsumablesModel(toners, replacements, sheets, printers), [toners, replacements, sheets, printers]);
 
-  const usedByText = (t: TonerStock) => {
-    const usedBy = printersUsing(printers, t.tonerType);
-    return usedBy.length
-      ? usedBy.map(p => `${p.location}${p.room ? ` (${p.room})` : ""}`).join(", ")
-      : "No printers assigned";
-  };
+  const usedByText = (t: TonerStock) => officesLabel(printersUsing(printers, t.tonerType));
 
   function exportPDF() {
     const today = new Date().toISOString().slice(0, 10);
@@ -69,7 +64,7 @@ export default function ConsumablesReport() {
     doc.table(["Office", "Brand", "Initial", "Used", "Left", "Monthly use", "Days left", "Status"], sheets.map(s => [s.officeName, s.brand, s.initialQuantity, Math.max(0, s.initialQuantity - s.currentQuantity), s.currentQuantity, s.averageMonthlyUsage ?? "Not enough data", s.estimatedDaysRemaining ?? "Not enough data", s.status]));
     doc.heading(2, "Recommendations");
     model.recommendations.forEach(item => doc.bullet(`${item.priority}: ${item.text}`, 0));
-    doc.callout("info", "How usage is calculated", "A toner is counted as used when a replacement is recorded. Toner duration is the number of days between repeat replacements for the same cartridge and colour. A4 used is initial quantity minus current quantity; restocking or missing updates can limit historical accuracy.");
+    doc.callout("info", "How usage is calculated", "A toner is counted as used when a replacement is recorded. Toner duration is the number of days between repeat replacements for the same printer and colour. A4 used is initial quantity minus current quantity; restocking or missing updates can limit historical accuracy.");
     doc.save(`Consumables_Management_Report_${today}.pdf`);
   }
 

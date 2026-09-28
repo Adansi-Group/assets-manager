@@ -16,12 +16,11 @@ import type { Gadget } from "../../types/gadget";
 import type { Printer } from "../../types/printer";
 import { inRange, toISODate, type Range } from "../shared/period";
 import { joinList, verbHave } from "../shared/text";
+import { replacementIntervals } from "../shared/replacementIntervals";
 import { lowToners } from "../../toners/stockLevel";
 import { buildGadgetReport } from "../gadgets/buildModel";
 import type { DataGap, GadgetReportModel, Tally } from "../gadgets/model";
 import { buildConsumablesModel } from "../consumables/model";
-
-const DAY_MS = 86_400_000;
 
 /**
  * Categories in this report that the Assets Station never prices. Naming them
@@ -147,11 +146,6 @@ const num = (value: unknown): number => {
 
 const positive = (value: unknown): number => Math.max(0, num(value));
 
-const time = (value?: string | null): number | null => {
-  const t = value ? new Date(value).getTime() : NaN;
-  return Number.isFinite(t) ? t : null;
-};
-
 const mean = (values: number[]): number | null =>
   values.length === 0 ? null : Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 
@@ -166,33 +160,6 @@ function tally(values: (string | null | undefined)[]): Tally[] {
     .map(([key, count]) => ({ key, count }))
     // Count desc, then key asc so equal counts have a stable, readable order.
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
-}
-
-/**
- * Days between consecutive replacements at the same printer.
- *
- * Grouped by location/room/printer/colour because a gap only means anything
- * within one cartridge slot; mixing slots would average unrelated intervals.
- */
-function replacementIntervals(replacements: TonerReplacement[]): number[] {
-  const groups = new Map<string, number[]>();
-  for (const item of replacements) {
-    const key = [item.location, item.room, item.printerType, item.colorType]
-      .map(v => v?.trim().toLowerCase() ?? "")
-      .join("|");
-    const at = time(item.dateReplaced);
-    if (at === null) continue;
-    groups.set(key, [...(groups.get(key) ?? []), at]);
-  }
-
-  const intervals: number[] = [];
-  for (const times of groups.values()) {
-    times.sort((a, b) => a - b);
-    for (let i = 1; i < times.length; i++) {
-      intervals.push(Math.max(0, Math.round((times[i] - times[i - 1]) / DAY_MS)));
-    }
-  }
-  return intervals;
 }
 
 function buildToners(

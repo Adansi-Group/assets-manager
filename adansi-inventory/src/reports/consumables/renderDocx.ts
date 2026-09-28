@@ -7,6 +7,7 @@ import type { TonerStock, TonerReplacement } from "../../types/toner";
 import type { Printer } from "../../types/printer";
 import { buildConsumablesModel } from "./model";
 import { printersUsing } from "../../toners/pools";
+import { officesLabel } from "../../toners/poolRows";
 
 const green = "16A34A";
 const cell = (text: string | number, header = false) => new TableCell({
@@ -39,13 +40,9 @@ export async function downloadConsumablesDocx(toners: TonerStock[], replacements
       heading("Management Recommendations"),
       ...m.recommendations.map(r => new Paragraph({ bullet:{level:0}, children:[new TextRun({text:`${r.priority}: `,bold:true}),new TextRun(r.text)] })),
       heading("Toner Stock Detail"),
-      table(["Cartridge", "Colour", "Left", "Status", "Used by"], toners.map(t => {
-        const usedBy = printersUsing(printers, t.tonerType);
-        const offices = usedBy.length
-          ? usedBy.map(p => `${p.location}${p.room ? ` (${p.room})` : ""}`).join(", ")
-          : "No printers assigned";
-        return [t.tonerType, t.colorType, t.quantity, t.status ?? "Not set", offices];
-      })),
+      table(["Cartridge", "Colour", "Left", "Status", "Used by"], toners.map(t => [
+        t.tonerType, t.colorType, t.quantity, t.status ?? "Not set", officesLabel(printersUsing(printers, t.tonerType)),
+      ])),
       heading("A4 Stock and Consumption"),
       table(["Office", "Brand", "Initial", "Used", "Left", "Monthly use", "Days left", "Status"], sheets.map(s => [s.officeName, s.brand, s.initialQuantity, Math.max(0,s.initialQuantity-s.currentQuantity), s.currentQuantity, s.averageMonthlyUsage ?? "N/A", s.estimatedDaysRemaining ?? "N/A", s.status])),
       heading("Data Notes"),

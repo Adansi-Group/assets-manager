@@ -40,6 +40,30 @@ export async function getPrinters(): Promise<Printer[]> {
   }
 }
 
+/**
+ * Same read as `getPrinters`, but rethrows instead of swallowing into `[]`.
+ *
+ * `getPrinters` hides a failed read as "no printers", which a caller that
+ * derives a printer count from the result (how many printers a cartridge
+ * feeds) cannot tell apart from a genuinely empty estate — it would print
+ * "used by 0 printers" instead of surfacing an error. Callers that need to
+ * tell the two apart use this instead; `getPrinters` itself is left as is
+ * because other callers depend on its swallow-to-[] behaviour.
+ */
+export async function getPrintersStrict(): Promise<Printer[]> {
+  const q = query(
+    collection(db, COLLECTION),
+    orderBy("date", "desc")
+  );
+
+  const snapshot = await getDocs(q);
+
+  return snapshot.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<Printer, "id">),
+  }));
+}
+
 // ADD NEW PRINTER
 export async function addPrinter(
   printer: Omit<Printer, "id">

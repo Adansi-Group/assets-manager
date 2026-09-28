@@ -37,6 +37,17 @@ export function usedByLabel(n: number): string {
   return n === 1 ? "1 printer" : `${n} printers`;
 }
 
+/**
+ * The offices a cartridge's printers sit in, comma-separated: a printer's
+ * room, when it has one, in brackets after its location — otherwise just the
+ * location. Shared by the consumables report's page and its docx export so
+ * the two do not drift into two different formats for the same list.
+ */
+export function officesLabel(printers: Printer[]): string {
+  if (printers.length === 0) return "No printers assigned";
+  return printers.map(p => `${p.location}${p.room ? ` (${p.room})` : ""}`).join(", ");
+}
+
 /** The pool a row's selected colour actually points at, if it exists. */
 export function selectedPool(row: CartridgeRow): TonerStock | undefined {
   return row.colors[normalizeType(row.selectedColor)];

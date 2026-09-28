@@ -65,14 +65,41 @@ describe("buildConsumablesModel with pooled stock", () => {
     );
   });
 
-  it("keeps the same colour of different cartridges apart", () => {
+  it("keeps the same colour of different cartridges apart, as two distinct rows and reorder lines", () => {
     const model = buildConsumablesModel(
       [pool({ id: "a", tonerType: "222A" }), pool({ id: "b", tonerType: "207A" })],
+      [],
+      [],
+      [...printers, printer("branch", "207A")]
+    );
+
+    expect(model.tonerLow.map(item => item.tonerType).sort()).toEqual(["207A", "222A"]);
+    expect(model.recommendations.map(a => a.text)).toContain(
+      "Reorder Magenta 222A — 2 left; used by 3 printers"
+    );
+    expect(model.recommendations.map(a => a.text)).toContain(
+      "Reorder Magenta 207A — 2 left; used by 1 printer"
+    );
+  });
+
+  it("prepares to reorder rather than reorder outright when stock is low but not yet critical", () => {
+    const model = buildConsumablesModel(
+      [pool({ id: "p", status: "Warning" })],
       [],
       [],
       printers
     );
 
-    expect(model.tonerLow).toHaveLength(2);
+    expect(model.recommendations.map(a => a.text)).toContain(
+      "Prepare to reorder Magenta 222A — 2 left; used by 3 printers"
+    );
+  });
+
+  it("says used by 0 printers rather than omitting the count when no printer takes the cartridge", () => {
+    const model = buildConsumablesModel([pool({ id: "p", tonerType: "999Z" })], [], [], []);
+
+    expect(model.recommendations.map(a => a.text)).toContain(
+      "Reorder Magenta 999Z — 2 left; used by 0 printers"
+    );
   });
 });

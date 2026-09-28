@@ -3,12 +3,7 @@ import type { TonerStock, TonerReplacement } from "../../types/toner";
 import type { Printer } from "../../types/printer";
 import { printersUsing } from "../../toners/pools";
 import { usedByLabel } from "../../toners/poolRows";
-
-const day = 86_400_000;
-const validDate = (value?: string) => {
-  const time = value ? new Date(value).getTime() : NaN;
-  return Number.isFinite(time) ? time : null;
-};
+import { replacementIntervals } from "../shared/replacementIntervals";
 
 export type Recommendation = { priority: "Urgent" | "Soon" | "Monitor"; text: string };
 
@@ -20,16 +15,10 @@ export function buildConsumablesModel(
 ) {
   const tonerRemaining = toners.reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0);
   const tonerLow = toners.filter(item => item.quantity <= 2 || item.status === "Warning" || item.status === "Critical");
-  const groups = new Map<string, TonerReplacement[]>();
-  replacements.forEach(item => {
-    const key = [item.tonerType, item.colorType].map(v => v?.trim().toLowerCase() ?? "").join("|");
-    groups.set(key, [...(groups.get(key) ?? []), item]);
-  });
-  const intervals: number[] = [];
-  groups.forEach(items => {
-    const times = items.map(item => validDate(item.dateReplaced)).filter((v): v is number => v !== null).sort((a, b) => a - b);
-    for (let i = 1; i < times.length; i++) intervals.push(Math.max(0, Math.round((times[i] - times[i - 1]) / day)));
-  });
+  // "Average toner usage duration" is how long one printer's cartridge
+  // lasts, so intervals are grouped per printer slot, not per cartridge —
+  // the same rule the station report uses, from the same shared helper.
+  const intervals = replacementIntervals(replacements);
 
   const a4Remaining = sheets.reduce((sum, item) => sum + Math.max(0, Number(item.currentQuantity) || 0), 0);
   const a4Used = sheets.reduce((sum, item) => sum + Math.max(0, (Number(item.initialQuantity) || 0) - (Number(item.currentQuantity) || 0)), 0);
