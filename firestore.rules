@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Who is asking -------------------------------------------------
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email.size() > 0;
+    }
+    function memberPath() {
+      return /databases/$(database)/documents/members/$(request.auth.token.email.lower());
+    }
+
+    // Being listed is not enough: anyone can register a password account for
+    // an email they do not own. Trust the sign-in only if the provider
+    // verified the email (Google does), or the member entry expects a password.
+    function verified() { return request.auth.token.email_verified == true; }
+    function trusted(member) {
+      return verified() || member.get('passwordSignIn', false) == true;
+    }
+
+    function isMember() {
+      return signedIn() && exists(memberPath()) && trusted(get(memberPath()).data);
+    }
+    function hasRole(roles) { return isMember() && get(memberPath()).data.role in roles; }
+
+    function it()  { return hasRole(['Admin', 'IT Manager']); }
+    function hr()  { return hasRole(['Admin', 'HR Manager']); }
+    function admin() { return hasRole(['Admin']); }
+
+    // ---- The access list -----------------------------------------------
+    match /members/{email} {
+      // Anyone may look up their OWN entry, so the app can tell "not on the
+      // list" from "couldn't check". A stranger's entry does not exist, and
+      // an untrusted sign-in cannot read a real one.
+      allow get: if signedIn()
+        && email == request.auth.token.email.lower()
+        && (resource == null || trusted(resource.data));
+      allow read: if isMember();
+      allow write: if admin();
+    }
+
+    // ---- IT scope -------------------------------------------------------
+    match /printers/{id}           { allow read: if isMember(); allow write: if it(); }
+    match /toner_stock/{id}        { allow read: if isMember(); allow write: if it(); }
+    match /toner_deliveries/{id}   { allow read: if isMember(); allow write: if it(); }
+    match /toner_replacements/{id} { allow read: if isMember(); allow write: if it(); }
+    match /toner_types/{id}        { allow read: if isMember(); allow write: if it(); }
+    match /a4_sheets/{id}          { allow read: if isMember(); allow write: if it(); }
+    match /internet_usage/{id}     { allow read: if isMember(); allow write: if it(); }
+    match /inventory/{id}          { allow read: if isMember(); allow write: if it(); }
+
+    // settings: IT may write printer_options only; everything else Admin.
+    // Firestore OR-combines rules, so express this in ONE match block.
+    match /settings/{id} {
+      allow read: if isMember();
+      allow write: if admin() || (id == 'printer_options' && it());
+    }
+
+    // ---- HR scope -------------------------------------------------------
+    match /gadgets/{id}            { allow read: if isMember(); allow write: if hr(); }
+
+    // ---- Every member ---------------------------------------------------
+    match /support_tickets/{id}    { allow read, write: if isMember(); }
+    match /notifications/{id}      { allow read, write: if isMember(); }
+
+    // ---- Admin only -----------------------------------------------------
+    match /notification_settings/{id} { allow read: if isMember(); allow write: if admin(); }
+
+    // ---- Frozen ---------------------------------------------------------
+    match /toners/{id}             { allow read: if isMember(); allow write: if false; }
+    match /users/{id}              { allow read, write: if false; }
+
+    // No catch-all: any collection not named above is denied.
+  }
+}

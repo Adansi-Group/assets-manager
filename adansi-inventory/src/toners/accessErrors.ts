@@ -3,11 +3,14 @@
 // What to tell a person when Firestore refuses a read or write.
 //
 // Firestore's own text, "Missing or insufficient permissions", names neither
-// the collection nor the fix. The fix is always the same — a rule in the
-// Firebase console — so say that, and name the collection.
+// the collection nor the fix. The rules check membership and role, so the
+// likeliest cause is a role that may not do this — name the collection and
+// say who to ask.
 //
 // Pure: no React, no Firestore. The error is inspected by its `code`, which a
 // FirestoreError carries as "permission-denied".
+
+const ASK_AN_ADMIN = "If you think you should, ask an administrator to check your role.";
 
 function isPermissionDenied(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
@@ -32,15 +35,15 @@ export function accessErrorMessage(
   if (isPermissionDenied(error)) {
     const names = (typeof collections === "string" ? [collections] : [...collections]).filter(Boolean);
     if (names.length === 1) {
-      return `Firestore refused access to ${names[0]}. Add a read/write rule for it in the Firebase console.`;
+      return `You don't have permission to change or read ${names[0]}. ${ASK_AN_ADMIN}`;
     }
     if (names.length > 1) {
       return (
-        `Firestore refused access to one of ${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}. ` +
-        "Check that each has a read/write rule in the Firebase console."
+        `You don't have permission to read one of ${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}. ` +
+        ASK_AN_ADMIN
       );
     }
-    return "Firestore refused access. Check the rules in the Firebase console.";
+    return `You don't have permission to do that. ${ASK_AN_ADMIN}`;
   }
   if (error instanceof Error && error.message) return error.message;
   return fallback;
