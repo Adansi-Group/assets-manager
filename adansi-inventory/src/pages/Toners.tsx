@@ -10,45 +10,85 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import AddTonerModal from "../components/AddTonerModal";
-import type { Toner } from "../types/toner";
-import { lowToners } from "../toners/stockLevel";
-import { groupToners, selectedRecord, type GroupedToner } from "../toners/grouping";
-import { unlinkedStock } from "../toners/stockMatching";
+import type { Toner, TonerStock } from "../types/toner";
+import { lowToners, type TonerStockStatus } from "../toners/stockLevel";
+import { normalizeType, printersUsing } from "../toners/pools";
 import { getPrinters } from "../services/printerService";
 import type { Printer } from "../types/printer";
 import { getTonerReorderLevel } from "../services/notificationService";
 import {
-  getToners,
-  addToner,
-  updateToner,
-  deleteToner,
-} from "../services/tonerService";
+  getTonerStock,
+  addTonerStock,
+  updateTonerStock,
+  deleteTonerStock,
+} from "../services/tonerStockService";
 import Swal from "sweetalert2";
 import { AlertTriangle, Download, ChevronDown, Unlink } from "lucide-react";
 
-// Standard CMYK colors for most printers
-const STANDARD_COLORS = ["Black", "Cyan", "Magenta", "Yellow"] as const;
+// The colours a cartridge can be filed under. Matches the Add Toner form's
+// own option list, since a pool's colour has to be one of those values to be
+// reachable from that form.
+const ALL_COLOR_OPTIONS = ["Black", "Cyan", "Magenta", "Yellow", "Black PIXMA", "Color PIXMA"];
 
-// PIXMA colors (ink tank printers)
-const PIXMA_COLORS = ["Black", "Color"] as const;
+type CartridgeRow = {
+  key: string;
+  tonerType: string;
+  colors: Record<string, TonerStock>;
+  selectedColor: string;
+  usedBy: Printer[];
+  status?: TonerStockStatus;
+};
 
-// Function to get available colors based on printer type
-function getAvailableColors(printerType: string): readonly string[] {
-  // Check if printer is PIXMA (case insensitive)
-  if (printerType.toLowerCase().includes("pixma")) {
-    return PIXMA_COLORS;
-  }
-  
-  // Default to standard CMYK colors
-  return STANDARD_COLORS;
+/** One row per cartridge; the colour picker chooses among that cartridge's pools. */
+function groupPools(
+  pools: TonerStock[],
+  printers: Printer[],
+  selectedColors: Record<string, string>
+): CartridgeRow[] {
+  const groups: Record<string, CartridgeRow> = {};
+
+  pools.forEach((pool) => {
+    const key = normalizeType(pool.tonerType);
+
+    if (!groups[key]) {
+      groups[key] = {
+        key,
+        tonerType: pool.tonerType,
+        colors: {},
+        selectedColor: selectedColors[key] || pool.colorType,
+        usedBy: printersUsing(printers, pool.tonerType),
+      };
+    }
+
+    groups[key].colors[pool.colorType] = pool;
+
+    // Worst status across the set wins: a row is only calm when every
+    // colour in it is.
+    if (pool.status === "Critical") {
+      groups[key].status = "Critical";
+    } else if (pool.status === "Warning" && groups[key].status !== "Critical") {
+      groups[key].status = "Warning";
+    } else if (!groups[key].status) {
+      groups[key].status = pool.status;
+    }
+  });
+
+  return Object.values(groups);
+}
+
+function usedByLabel(n: number): string {
+  return n === 1 ? "1 printer" : `${n} printers`;
 }
 
 export default function Toners() {
-  const [toners, setToners] = useState<Toner[]>([]);
+  const [pools, setPools] = useState<TonerStock[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
+  // Typed against the modal's still-legacy prop shape until Task 8 narrows it
+  // to a pool; only the fields a pool actually has are ever populated.
   const [editing, setEditing] = useState<Toner | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedColors, setSelectedColors] = useState<Record<string, string>>({});
   const [reorderLevel, setReorderLevel] = useState<number | null>(null);
 
@@ -57,194 +97,239 @@ export default function Toners() {
 
   const isAddOpen = location.pathname === "/toners/add";
 
-  async function loadToners() {
+  async function loadStock() {
     setLoading(true);
-    const [data, level, printerList] = await Promise.all([
-      getToners(),
-      getTonerReorderLevel(),
-      getPrinters(),
-    ]);
-    setToners(data);
-    setReorderLevel(level);
-    setPrinters(printerList);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [data, level, printerList] = await Promise.all([
+        getTonerStock(),
+        getTonerReorderLevel(),
+        getPrinters(),
+      ]);
+      setPools(data);
+      setReorderLevel(level);
+      setPrinters(printerList);
+    } catch (error) {
+      // An empty table reads as "we have nothing", which would be a lie —
+      // say plainly that the stock could not be read instead.
+      setLoadError(error instanceof Error ? error.message : "Failed to load toner stock");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
     (async () => {
-      await loadToners();
+      await loadStock();
     })();
   }, []);
 
-  async function handleColorSelect(group: GroupedToner) {
-    const availableColors = getAvailableColors(group.printerType);
-    
+  async function handleColorSelect(row: CartridgeRow) {
+    const colours = Array.from(new Set([...ALL_COLOR_OPTIONS, ...Object.keys(row.colors)]));
+
     await Swal.fire({
-      title: 'Select Color to View',
+      title: "Select Color to View",
       html: `
         <div class="text-left space-y-2">
           <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            <strong>${group.location}</strong> ${group.room ? `<span class="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded ml-2">📍 ${group.room}</span>` : ''}<br>
-            <span class="text-xs">${group.printerType}</span>
+            <strong>${row.tonerType}</strong>
           </p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            ${availableColors.length === 2 ? '📦 PIXMA Printer (2 colors)' : '🖨️ Standard Printer (4 colors)'}
-          </p>
-          ${availableColors.map(color => {
-            const qty = group.colors[color as keyof typeof group.colors];
-            const isSelected = color === group.selectedColor;
-            const exists = qty !== undefined;
-            
-            return `
-              <div class="p-3 border rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 ${isSelected ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : 'border-gray-300 dark:border-gray-600'}"
-                   data-color="${color}">
-                <div class="flex justify-between items-center">
-                  <span class="font-medium ${getColorTextClass(color)}">${color}</span>
-                  <span class="text-gray-600 dark:text-gray-300">
-                    Qty: <strong>${exists ? qty : 0}</strong>
-                    ${!exists ? '<span class="text-xs text-gray-400 ml-2">(Not added)</span>' : ''}
-                  </span>
+          ${colours
+            .map((color) => {
+              const pool = row.colors[color];
+              const isSelected = color === row.selectedColor;
+
+              return `
+                <div class="p-3 border rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 ${isSelected ? "border-green-500 bg-green-50 dark:bg-green-900/20" : "border-gray-300 dark:border-gray-600"}"
+                     data-color="${color}">
+                  <div class="flex justify-between items-center">
+                    <span class="font-medium ${getColorTextClass(color)}">${color}</span>
+                    <span class="text-gray-600 dark:text-gray-300">
+                      Qty: <strong>${pool ? pool.quantity : 0}</strong>
+                      ${!pool ? '<span class="text-xs text-gray-400 ml-2">(Not added)</span>' : ""}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            `;
-          }).join('')}
+              `;
+            })
+            .join("")}
         </div>
       `,
       showCancelButton: true,
       showConfirmButton: false,
-      cancelButtonText: 'Close',
+      cancelButtonText: "Close",
       didOpen: () => {
-        const colorDivs = document.querySelectorAll('[data-color]');
-        colorDivs.forEach(div => {
-          div.addEventListener('click', () => {
-            const color = div.getAttribute('data-color');
+        const colorDivs = document.querySelectorAll("[data-color]");
+        colorDivs.forEach((div) => {
+          div.addEventListener("click", () => {
+            const color = div.getAttribute("data-color");
             if (color) {
               Swal.close();
-              setSelectedColors(prev => ({
+              setSelectedColors((prev) => ({
                 ...prev,
-                [group.key]: color
+                [row.key]: color,
               }));
             }
           });
         });
-      }
+      },
     });
   }
 
-  async function handleSave(toner: Toner | Omit<Toner, "id">) {
+  async function handleUsedByClick(row: CartridgeRow) {
+    if (row.usedBy.length === 0) {
+      await Swal.fire({
+        title: row.tonerType,
+        text: "No printer on the Printers page has this cartridge set as its toner type.",
+        icon: "info",
+      });
+      return;
+    }
+
+    await Swal.fire({
+      title: `Printers using ${row.tonerType}`,
+      html: `
+        <ul class="text-left space-y-1 text-sm">
+          ${row.usedBy
+            .map(
+              (printer) =>
+                `<li>${printer.location}${printer.room ? ` (${printer.room})` : ""} — ${printer.model}</li>`
+            )
+            .join("")}
+        </ul>
+      `,
+    });
+  }
+
+  // Typed to match the modal's current (pre-Task-8) prop shape; Task 8
+  // narrows this to Omit<TonerStock, "id"> once the modal only collects a
+  // pool's own fields.
+  async function handleSave(input: Toner | Omit<Toner, "id">) {
+    const pool: Omit<TonerStock, "id"> = {
+      tonerType: input.tonerType,
+      colorType: input.colorType,
+      quantity: input.quantity,
+      dateBrought: input.dateBrought,
+      ...(input.initialQuantity !== undefined && { initialQuantity: input.initialQuantity }),
+      ...(input.lastCheckedDate !== undefined && { lastCheckedDate: input.lastCheckedDate }),
+      ...(input.costPerUnit !== undefined && { costPerUnit: input.costPerUnit }),
+    };
+
     try {
-      if ("id" in toner) {
-        await updateToner(toner);
+      if ("id" in input) {
+        await updateTonerStock({ ...pool, id: input.id });
       } else {
-        await addToner(toner);
+        await addTonerStock(pool);
       }
 
-      await loadToners();
+      await loadStock();
       setEditing(null);
       navigate("/toners");
 
       Swal.fire({
         icon: "success",
-        title: "id" in toner ? "Toner Updated" : "Toner Added",
+        title: "id" in input ? "Toner Updated" : "Toner Added",
         timer: 1500,
         showConfirmButton: false,
       });
     } catch (error) {
+      // Surfaces addTonerStock's duplicate-pool error (and any other save
+      // failure) by its real message rather than a generic one.
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: "Failed to save toner",
+        text: error instanceof Error ? error.message : "Failed to save toner",
       });
     }
   }
 
-  async function handleQuantityUpdate(group: GroupedToner) {
-    const color = group.selectedColor;
-    const currentQty = group.colors[color as keyof typeof group.colors] || 0;
-    const existingRecord = group.colorRecords[color];
+  async function handleQuantityUpdate(row: CartridgeRow) {
+    const color = row.selectedColor;
+    const existingPool = row.colors[color];
+    const currentQty = existingPool?.quantity ?? 0;
 
     const result = await Swal.fire({
       title: `Update ${color} Toner Quantity`,
       html: `
         <div class="text-left space-y-3">
-          <p class="text-sm text-gray-600 dark:text-gray-400">Location: <strong>${group.location}</strong> ${group.room ? `<span class="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded ml-2">📍 ${group.room}</span>` : ''}</p>
-          <p class="text-sm text-gray-600 dark:text-gray-400">Printer: <strong>${group.printerType}</strong></p>
-          <p class="text-sm text-gray-600 dark:text-gray-400">Toner: <strong>${group.tonerType}</strong></p>
+          <p class="text-sm text-gray-600 dark:text-gray-400">Cartridge: <strong>${row.tonerType}</strong></p>
           <p class="text-sm text-gray-600 dark:text-gray-400">Color: <strong class="${getColorTextClass(color)}">${color}</strong></p>
           <p class="text-sm text-gray-600 dark:text-gray-400">Current quantity: <strong>${currentQty}</strong></p>
-          ${!existingRecord ? '<p class="text-xs text-orange-600 dark:text-orange-400">⚠️ This color hasn\'t been added yet. Enter quantity to create it.</p>' : ''}
-          <input 
-            id="new-quantity" 
-            type="number" 
-            min="0" 
+          ${!existingPool ? '<p class="text-xs text-orange-600 dark:text-orange-400">⚠️ This color hasn\'t been added yet. Enter quantity to create it.</p>' : ""}
+          <input
+            id="new-quantity"
+            type="number"
+            min="0"
             value="${currentQty}"
-            placeholder="Enter new quantity" 
+            placeholder="Enter new quantity"
             class="swal2-input"
             style="margin: 0; width: 100%;"
           />
         </div>
       `,
       showCancelButton: true,
-      confirmButtonText: existingRecord ? 'Update' : 'Add',
-      confirmButtonColor: '#16a34a',
+      confirmButtonText: existingPool ? "Update" : "Add",
+      confirmButtonColor: "#16a34a",
       preConfirm: () => {
-        const input = document.getElementById('new-quantity') as HTMLInputElement;
+        const input = document.getElementById("new-quantity") as HTMLInputElement;
         const newQty = parseInt(input.value);
-        
+
         if (isNaN(newQty) || newQty < 0) {
-          Swal.showValidationMessage('Please enter a valid quantity');
+          Swal.showValidationMessage("Please enter a valid quantity");
           return false;
         }
-        
+
         return newQty;
-      }
+      },
     });
 
-    if (result.isConfirmed && result.value !== undefined) {
-      if (existingRecord) {
-        // ✅ ADD STATUS CALCULATION HERE
-        const updatedToner: Toner = {
-          ...existingRecord,
+    if (!result.isConfirmed || result.value === undefined) return;
+
+    try {
+      if (existingPool) {
+        await updateTonerStock({
+          ...existingPool,
           quantity: result.value,
           lastCheckedDate: new Date().toISOString().split("T")[0],
-        };
-        await updateToner(updatedToner);
+        });
       } else {
-        // ✅ ADD STATUS HERE
-        const newToner: Omit<Toner, "id"> = {
-          location: group.location,
-          room: group.room,
-          printerType: group.printerType,
-          tonerType: group.tonerType,
+        await addTonerStock({
+          tonerType: row.tonerType,
           colorType: color,
           quantity: result.value,
-          dateBrought: new Date().toISOString().split("T")[0],
           initialQuantity: result.value,
-          status: "Good", // ✅ ADDED
+          dateBrought: new Date().toISOString().split("T")[0],
           lastCheckedDate: new Date().toISOString().split("T")[0],
-        };
-        await addToner(newToner);
+        });
       }
 
-      await loadToners();
-      
+      await loadStock();
+
       Swal.fire({
-        icon: 'success',
-        title: existingRecord ? 'Quantity Updated' : 'Color Added',
-        text: `${color} toner ${existingRecord ? 'updated to' : 'added with quantity'} ${result.value}`,
+        icon: "success",
+        title: existingPool ? "Quantity Updated" : "Color Added",
+        text: `${color} toner ${existingPool ? "updated to" : "added with quantity"} ${result.value}`,
         timer: 1500,
         showConfirmButton: false,
+      });
+    } catch (error) {
+      // A duplicate-pool error means this colour was created by someone else
+      // between opening the row and confirming — say so instead of failing silently.
+      Swal.fire({
+        icon: "error",
+        title: "Could not save",
+        text: error instanceof Error ? error.message : "Failed to save toner stock",
       });
     }
   }
 
-  async function handleRemoveGroup(group: GroupedToner) {
-    const colorCount = Object.keys(group.colors).length;
-    
+  async function handleRemoveRow(row: CartridgeRow) {
+    const colorCount = Object.keys(row.colors).length;
+
     const result = await Swal.fire({
       title: "Delete All Colors?",
-      html: `This will delete <strong>${colorCount}</strong> color toner(s) for this printer:<br><br>
-            <strong>${group.location}</strong> ${group.room ? `(${group.room})` : ''} - ${group.printerType}`,
+      html: `This will delete <strong>${colorCount}</strong> color pool(s) for:<br><br>
+            <strong>${row.tonerType}</strong>`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#dc2626",
@@ -253,15 +338,15 @@ export default function Toners() {
     });
 
     if (result.isConfirmed) {
-      for (const toner of Object.values(group.colorRecords)) {
-        await deleteToner(toner.id);
+      for (const pool of Object.values(row.colors)) {
+        await deleteTonerStock(pool.id);
       }
-      
-      await loadToners();
+
+      await loadStock();
 
       Swal.fire({
         title: "Deleted!",
-        text: `${colorCount} toner color(s) deleted.`,
+        text: `${colorCount} toner color pool(s) deleted.`,
         icon: "success",
         timer: 1500,
         showConfirmButton: false,
@@ -271,25 +356,14 @@ export default function Toners() {
 
   function exportCSV() {
     const csv = [
-      [
-        "Location",
-        "Room/Office",
-        "Printer",
-        "Toner",
-        "Color",
-        "Quantity",
-        "Status",
-        "Date",
-      ],
-      ...toners.map((t) => [
-        t.location,
-        t.room || "N/A",
-        t.printerType,
-        t.tonerType,
-        t.colorType,
-        t.quantity,
-        t.status || "N/A",
-        t.dateBrought,
+      ["Cartridge", "Colour", "Quantity", "Status", "Used by", "Date"],
+      ...pools.map((p) => [
+        p.tonerType,
+        p.colorType,
+        p.quantity,
+        p.status || "N/A",
+        usedByLabel(printersUsing(printers, p.tonerType).length),
+        p.dateBrought,
       ]),
     ]
       .map((r) => r.join(","))
@@ -303,25 +377,35 @@ export default function Toners() {
     a.click();
   }
 
-  const groupedToners = groupToners(toners, selectedColors);
+  const groupedRows = groupPools(pools, printers, selectedColors);
 
-  const filtered = groupedToners.filter((g) =>
-    `${g.location} ${g.room || ''} ${g.printerType} ${g.tonerType}`
+  const filtered = groupedRows.filter((row) =>
+    `${row.tonerType} ${Object.keys(row.colors).join(" ")}`
       .toLowerCase()
       .includes(search.toLowerCase())
   );
 
-  // Individual records, not groups: a group is one printer's set of colours, and
-  // the reorder decision is per cartridge.
-  const needsReorder = reorderLevel === null ? [] : lowToners(toners, reorderLevel);
+  // Individual pools, not rows: a row is one cartridge's set of colours, and
+  // the reorder decision is per colour. `location` is stood in for by the
+  // cartridge + colour, since pools have no location of their own — it only
+  // exists here to give lowToners a stable tie-break for equal quantities.
+  const needsReorder =
+    reorderLevel === null
+      ? []
+      : lowToners(
+          pools.map((p) => ({ ...p, location: `${p.tonerType} ${p.colorType}` })),
+          reorderLevel
+        );
 
-  // Stock pointing at a printer that does not exist. Invisible until someone
-  // tries to replace a cartridge, so it is worth saying out loud.
-  const unlinked = unlinkedStock(toners, printers);
+  // Printers that cannot be matched to any pool at all, and pools that no
+  // printer draws on — both invisible until someone tries a replacement or
+  // wonders why a cartridge never seems to move.
+  const printersWithoutTonerType = printers.filter((p) => !normalizeType(p.tonerType));
+  const unusedPools = pools.filter((p) => printersUsing(printers, p.tonerType).length === 0);
 
-  const critical = groupedToners.filter((g) => g.status === "Critical").length;
-  const warning = groupedToners.filter((g) => g.status === "Warning").length;
-  const good = groupedToners.filter((g) => g.status === "Good").length;
+  const critical = groupedRows.filter((r) => r.status === "Critical").length;
+  const warning = groupedRows.filter((r) => r.status === "Warning").length;
+  const good = groupedRows.filter((r) => r.status === "Good").length;
 
   if (loading) {
     return (
@@ -334,70 +418,98 @@ export default function Toners() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <div
+          role="alert"
+          className="bg-red-50 dark:bg-red-950/40 border-l-4 border-red-500 rounded-r-lg p-5"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" size={22} />
+            <div className="flex-1">
+              <p className="font-bold text-red-800 dark:text-red-300">Could not load toner stock</p>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-0.5">{loadError}</p>
+              <button
+                onClick={loadStock}
+                className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6 bg-gray-100 dark:bg-gray-900">
       {/* DASHBOARD CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat title="Total Toner Sets" value={groupedToners.length} />
+        <Stat title="Total Toner Sets" value={groupedRows.length} />
         <Stat title="Good Stock" value={good} color="text-green-600" />
         <Stat title="Low Stock" value={warning} color="text-yellow-600" />
         <Stat title="Critical" value={critical} color="text-red-600" />
       </div>
 
-      
-
-      {unlinked.length > 0 && (
+      {(printersWithoutTonerType.length > 0 || unusedPools.length > 0) && (
         <div
           role="alert"
           className="bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-500 rounded-r-lg p-5"
         >
           <div className="flex items-start gap-3">
             <Unlink className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={22} />
-            <div className="flex-1">
-              <p className="font-bold text-amber-800 dark:text-amber-300">
-                {unlinked.length} stock {unlinked.length === 1 ? "record is" : "records are"} not
-                linked to any printer
-              </p>
-              <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
-                The location, room or model on {unlinked.length === 1 ? "it" : "them"} matches no
-                printer on the Printers page, so a replacement will report the stock as missing.
-                Edit {unlinked.length === 1 ? "it" : "each one"} to match the printer exactly.
-              </p>
+            <div className="flex-1 space-y-4">
+              {printersWithoutTonerType.length > 0 && (
+                <div>
+                  <p className="font-bold text-amber-800 dark:text-amber-300">
+                    {printersWithoutTonerType.length}{" "}
+                    {printersWithoutTonerType.length === 1 ? "printer has" : "printers have"} no
+                    toner type set
+                  </p>
+                  <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+                    Without a toner type, replacement cannot find a stock pool for{" "}
+                    {printersWithoutTonerType.length === 1 ? "it" : "them"}. Set it on the
+                    Printers page.
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {printersWithoutTonerType.map((p) => (
+                      <li
+                        key={p.id}
+                        className="text-sm bg-white/60 dark:bg-gray-900/40 rounded p-3 text-gray-900 dark:text-white"
+                      >
+                        {p.location}
+                        {p.room ? ` (${p.room})` : ""} — {p.model}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-              <ul className="mt-3 space-y-2">
-                {unlinked.map(({ toner, candidates }) => (
-                  <li
-                    key={toner.id}
-                    className="text-sm bg-white/60 dark:bg-gray-900/40 rounded p-3"
-                  >
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {toner.colorType} {toner.tonerType}
-                    </span>
-                    <span className="text-gray-600 dark:text-gray-400">
-                      {" "}&mdash; {toner.location}
-                      {toner.room ? ` (${toner.room})` : " (no room)"} &middot;{" "}
-                      {toner.printerType}
-                    </span>
-
-                    {candidates.length > 0 ? (
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                        Closest printer differs by {candidates[0].differs}, recorded as{" "}
-                        <span className="font-mono text-gray-900 dark:text-white">
-                          {candidates[0].differs === "model"
-                            ? candidates[0].printer.model
-                            : candidates[0].differs === "room"
-                              ? candidates[0].printer.room || "no room"
-                              : candidates[0].printer.location}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                        No printer is close enough to suggest &mdash; check the Printers page.
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              {unusedPools.length > 0 && (
+                <div>
+                  <p className="font-bold text-amber-800 dark:text-amber-300">
+                    {unusedPools.length} stock pool{unusedPools.length === 1 ? "" : "s"}{" "}
+                    {unusedPools.length === 1 ? "has" : "have"} no printer using{" "}
+                    {unusedPools.length === 1 ? "it" : "them"}
+                  </p>
+                  <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+                    No printer on the Printers page has this cartridge set as its toner type.
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {unusedPools.map((p) => (
+                      <li
+                        key={p.id}
+                        className="text-sm bg-white/60 dark:bg-gray-900/40 rounded p-3 text-gray-900 dark:text-white"
+                      >
+                        {p.colorType} {p.tonerType} — {p.quantity}{" "}
+                        {p.quantity === 1 ? "cartridge" : "cartridges"}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -425,8 +537,7 @@ export default function Toners() {
                     <span className="font-semibold">
                       {t.colorType} {t.tonerType}
                     </span>{" "}
-                    at {t.location}
-                    {t.room ? ` (${t.room})` : ""} —{" "}
+                    —{" "}
                     <span className="font-semibold">
                       {t.quantity === 0
                         ? "none left"
@@ -473,10 +584,9 @@ export default function Toners() {
           <thead className="bg-gray-100 dark:bg-gray-700">
             <tr>
               {[
-                "Location",
-                "Printer",
-                "Toner",
+                "Cartridge",
                 "Color",
+                "Used by",
                 "Qty",
                 "Status",
                 "Recommendation",
@@ -490,42 +600,30 @@ export default function Toners() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((group) => {
-              const displayedQty = group.colors[group.selectedColor as keyof typeof group.colors] || 0;
-              const displayedToner = group.colorRecords[group.selectedColor];
-              
+            {filtered.map((row) => {
+              const selectedPool = row.colors[row.selectedColor];
+              const displayedQty = selectedPool?.quantity ?? 0;
+
               return (
-                <tr key={group.id} className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-gray-900 dark:text-white">{group.location}</span>
-                      {group.room && (
-                        <span className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">📍 {group.room}</span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                    {group.printerType}
-                    {group.printerType.toLowerCase().includes('pixma') && (
-                      <span className="ml-2 text-xs text-purple-600 dark:text-purple-400">📦</span>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                    {group.tonerType}
+                <tr key={row.key} className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+                    {row.tonerType}
                   </td>
 
                   <td className="px-4 py-3">
                     <ColorSelectorBadge
-                      color={group.selectedColor}
-                      onClick={() => handleColorSelect(group)}
+                      color={row.selectedColor}
+                      onClick={() => handleColorSelect(row)}
                     />
                   </td>
 
                   <td className="px-4 py-3">
+                    <UsedByChip count={row.usedBy.length} onClick={() => handleUsedByClick(row)} />
+                  </td>
+
+                  <td className="px-4 py-3">
                     <button
-                      onClick={() => handleQuantityUpdate(group)}
+                      onClick={() => handleQuantityUpdate(row)}
                       className="text-gray-900 dark:text-white font-bold text-lg hover:text-green-600 dark:hover:text-green-400 transition-colors"
                       title="Click to update quantity"
                     >
@@ -537,25 +635,40 @@ export default function Toners() {
                   </td>
 
                   <td className="px-4 py-3">
-                    <StatusBadge status={displayedToner?.status} />
+                    <StatusBadge status={selectedPool?.status} />
                   </td>
 
                   <td className="px-4 py-3">
                     <RecommendationBadge
-                      percentage={displayedToner?.initialQuantity ? (displayedQty / displayedToner.initialQuantity) * 100 : 100}
+                      percentage={selectedPool?.initialQuantity ? (displayedQty / selectedPool.initialQuantity) * 100 : 100}
                     />
                   </td>
 
                   <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                    {group.dateBrought}
+                    {selectedPool?.dateBrought ?? "—"}
                   </td>
 
                   <td className="px-4 py-3 space-x-3 whitespace-nowrap">
                     <button
                       onClick={() => {
-                        const record = selectedRecord(group);
+                        const record = row.colors[row.selectedColor] ?? Object.values(row.colors)[0];
                         if (!record) return;
-                        setEditing(record);
+                        // The modal still expects a Toner shape until Task 8;
+                        // location/printerType have no pool equivalent, so
+                        // they are left blank rather than invented.
+                        setEditing({
+                          id: record.id,
+                          location: "",
+                          printerType: "",
+                          tonerType: record.tonerType,
+                          colorType: record.colorType,
+                          quantity: record.quantity,
+                          dateBrought: record.dateBrought,
+                          initialQuantity: record.initialQuantity,
+                          lastCheckedDate: record.lastCheckedDate,
+                          costPerUnit: record.costPerUnit,
+                          status: record.status,
+                        });
                         navigate("/toners/add");
                       }}
                       className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
@@ -563,7 +676,7 @@ export default function Toners() {
                       Edit
                     </button>
                     <button
-                      onClick={() => handleRemoveGroup(group)}
+                      onClick={() => handleRemoveRow(row)}
                       className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
                     >
                       Delete
@@ -575,7 +688,7 @@ export default function Toners() {
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center py-8 text-gray-400 dark:text-gray-500">
+                <td colSpan={8} className="text-center py-8 text-gray-400 dark:text-gray-500">
                   {search ? "No toners found" : "No toners yet. Add your first toner!"}
                 </td>
               </tr>
@@ -657,6 +770,18 @@ function ColorSelectorBadge({ color, onClick }: { color: string; onClick: () => 
   );
 }
 
+function UsedByChip({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all inline-flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:hover:bg-blue-800"
+      title="Click to see which printers"
+    >
+      {usedByLabel(count)}
+    </button>
+  );
+}
+
 function RecommendationBadge({ percentage }: { percentage: number }) {
   if (percentage > 50) {
     return (
@@ -668,7 +793,7 @@ function RecommendationBadge({ percentage }: { percentage: number }) {
       </div>
     );
   }
-  
+
   return (
     <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 text-xs">
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -678,5 +803,3 @@ function RecommendationBadge({ percentage }: { percentage: number }) {
     </div>
   );
 }
-
-
