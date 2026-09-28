@@ -1,20 +1,22 @@
 // src/pages/Users.tsx
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { db, auth } from "../firebase/firebase";
 import type { User, UserRole } from "../types/users";
+import type { Member } from "../types/member";
+import { getMembers, addMember, updateMember, removeMember } from "../services/memberService";
+import { memberChangeProblem } from "../access/members";
+import { accessErrorMessage } from "../toners/accessErrors";
 import { Users as UsersIcon, Plus, Edit, Trash2, Shield, Mail, UserCheck } from "lucide-react";
 import Swal from "sweetalert2";
 
-// `currentUser` is unused here; Task 4 rewrites this page to consume it.
-// Referencing it avoids an unused-var lint failure while keeping the
-// prop typed so App.tsx's route wiring typechecks in this commit.
+/** Names, emails and departments are typed by people; keep them out of the Swal markup's way. */
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
 export default function Users({ currentUser }: { currentUser: User }) {
-  void currentUser;
-  const [users, setUsers] = useState<User[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -23,23 +25,12 @@ export default function Users({ currentUser }: { currentUser: User }) {
   async function loadUsers() {
     setLoading(true);
     try {
-      const snapshot = await getDocs(collection(db, "users"));
-      const usersList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        email: doc.data().email || "",
-        name: doc.data().name || "Unknown",
-        role: doc.data().role || "Viewer",
-        department: doc.data().department,
-        createdAt: doc.data().createdAt || new Date().toISOString(),
-      })) as User[];
-      setUsers(usersList);
+      const list = await getMembers();
+      setMembers(list);
+      setLoadError(null);
     } catch (error) {
-      console.error("Error loading users:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Failed to load users",
-      });
+      console.error("Error loading members:", error);
+      setLoadError(accessErrorMessage(error, "members"));
     } finally {
       setLoading(false);
     }
@@ -53,14 +44,11 @@ export default function Users({ currentUser }: { currentUser: User }) {
           <div>
             <label class="block text-sm font-medium mb-2">Email</label>
             <input id="email" type="email" class="swal2-input w-full" placeholder="user@example.com">
+            <p class="text-xs text-gray-500 mt-1">They sign in with the Google account for this email.</p>
           </div>
           <div>
             <label class="block text-sm font-medium mb-2">Name</label>
             <input id="name" type="text" class="swal2-input w-full" placeholder="John Doe">
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-2">Password</label>
-            <input id="password" type="password" class="swal2-input w-full" placeholder="Min 6 characters">
           </div>
           <div>
             <label class="block text-sm font-medium mb-2">Role</label>
@@ -68,7 +56,7 @@ export default function Users({ currentUser }: { currentUser: User }) {
               <option value="Admin">Admin</option>
               <option value="IT Manager">IT Manager</option>
               <option value="HR Manager">HR Manager</option>
-              <option value="Viewer">Viewer</option>
+              <option value="Viewer" selected>Viewer</option>
             </select>
           </div>
           <div>
@@ -78,104 +66,76 @@ export default function Users({ currentUser }: { currentUser: User }) {
         </div>
       `,
       showCancelButton: true,
-      confirmButtonText: "Create User",
+      confirmButtonText: "Add User",
       confirmButtonColor: "#16a34a",
       width: 600,
       preConfirm: () => {
         const email = (document.getElementById("email") as HTMLInputElement).value;
         const name = (document.getElementById("name") as HTMLInputElement).value;
-        const password = (document.getElementById("password") as HTMLInputElement).value;
         const role = (document.getElementById("role") as HTMLSelectElement).value as UserRole;
         const department = (document.getElementById("department") as HTMLInputElement).value;
 
-        if (!email || !name || !password || !role) {
+        if (!email || !name || !role) {
           Swal.showValidationMessage("Please fill in all required fields");
           return false;
         }
 
-        if (password.length < 6) {
-          Swal.showValidationMessage("Password must be at least 6 characters");
-          return false;
-        }
-
-        return { email, name, password, role, department };
+        return { email, name, role, department };
       }
     });
 
     if (result.isConfirmed && result.value) {
-      const { email, name, password, role, department } = result.value;
-
-      Swal.fire({
-        title: "Creating user...",
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
+      const { email, name, role, department } = result.value;
 
       try {
-        // Create Firebase Auth user
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const uid = userCredential.user.uid;
-
-        // Create user document in Firestore
-        const newUser: Omit<User, "id"> = {
-          email,
-          name,
-          role,
-          department: department || undefined,
-          createdAt: new Date().toISOString(),
-        };
-
-        await setDoc(doc(db, "users", uid), newUser);
-
-        await loadUsers();
+        await addMember({ email, name, role, department: department || undefined }, currentUser.email);
 
         Swal.fire({
           icon: "success",
-          title: "User Created!",
-          html: `
-            <p>${name} has been added successfully</p>
-            <p class="text-sm text-yellow-600 mt-2">⚠️ You may be logged out. Please log back in if needed.</p>
-          `,
+          title: "User Added!",
+          html: `<p>${escapeHtml(name)} has been added successfully</p>`,
           timer: 3000,
           showConfirmButton: true,
         });
       } catch (error) {
-        console.error("Error creating user:", error);
+        console.error("Error adding member:", error);
         Swal.fire({
           icon: "error",
-          title: "Creation Failed",
-          text: error instanceof Error ? error.message : "Failed to create user",
+          title: "Add Failed",
+          text: accessErrorMessage(error, "members"),
         });
+      } finally {
+        await loadUsers();
       }
     }
   }
 
-  async function handleEditUser(user: User) {
+  async function handleEditUser(member: Member) {
     const result = await Swal.fire({
       title: "Edit User",
       html: `
         <div class="space-y-4 text-left">
           <div>
             <label class="block text-sm font-medium mb-2">Email</label>
-            <input id="email" type="email" class="swal2-input w-full" value="${user.email}" disabled>
+            <input id="email" type="email" class="swal2-input w-full" value="${escapeHtml(member.email)}" disabled>
             <p class="text-xs text-gray-500 mt-1">Email cannot be changed</p>
           </div>
           <div>
             <label class="block text-sm font-medium mb-2">Name</label>
-            <input id="name" type="text" class="swal2-input w-full" value="${user.name}">
+            <input id="name" type="text" class="swal2-input w-full" value="${escapeHtml(member.name)}">
           </div>
           <div>
             <label class="block text-sm font-medium mb-2">Role</label>
             <select id="role" class="swal2-input w-full">
-              <option value="Admin" ${user.role === "Admin" ? "selected" : ""}>Admin</option>
-              <option value="IT Manager" ${user.role === "IT Manager" ? "selected" : ""}>IT Manager</option>
-              <option value="HR Manager" ${user.role === "HR Manager" ? "selected" : ""}>HR Manager</option>
-              <option value="Viewer" ${user.role === "Viewer" ? "selected" : ""}>Viewer</option>
+              <option value="Admin" ${member.role === "Admin" ? "selected" : ""}>Admin</option>
+              <option value="IT Manager" ${member.role === "IT Manager" ? "selected" : ""}>IT Manager</option>
+              <option value="HR Manager" ${member.role === "HR Manager" ? "selected" : ""}>HR Manager</option>
+              <option value="Viewer" ${member.role === "Viewer" ? "selected" : ""}>Viewer</option>
             </select>
           </div>
           <div>
             <label class="block text-sm font-medium mb-2">Department</label>
-            <input id="department" type="text" class="swal2-input w-full" value="${user.department || ""}" placeholder="IT, HR, Finance, etc.">
+            <input id="department" type="text" class="swal2-input w-full" value="${escapeHtml(member.department || "")}" placeholder="IT, HR, Finance, etc.">
           </div>
         </div>
       `,
@@ -200,14 +160,14 @@ export default function Users({ currentUser }: { currentUser: User }) {
     if (result.isConfirmed && result.value) {
       const { name, role, department } = result.value;
 
-      try {
-        await updateDoc(doc(db, "users", user.id), {
-          name,
-          role,
-          department: department || undefined,
-        });
+      const problem = memberChangeProblem(currentUser.email, member, { kind: "edit", role });
+      if (problem) {
+        Swal.fire({ icon: "error", title: "Can't Update", text: problem });
+        return;
+      }
 
-        await loadUsers();
+      try {
+        await updateMember(member.email, { name, role, department: department || undefined });
 
         Swal.fire({
           icon: "success",
@@ -217,54 +177,57 @@ export default function Users({ currentUser }: { currentUser: User }) {
           showConfirmButton: false,
         });
       } catch (error) {
-        console.error("Error updating user:", error);
+        console.error("Error updating member:", error);
         Swal.fire({
           icon: "error",
           title: "Update Failed",
-          text: "Failed to update user",
+          text: accessErrorMessage(error, "members"),
         });
+      } finally {
+        await loadUsers();
       }
     }
   }
 
-  async function handleDeleteUser(user: User) {
+  async function handleDeleteUser(member: Member) {
+    const problem = memberChangeProblem(currentUser.email, member, { kind: "remove" });
+    if (problem) {
+      Swal.fire({ icon: "error", title: "Can't Remove", text: problem });
+      return;
+    }
+
     const result = await Swal.fire({
-      title: "Delete User?",
+      title: "Remove User?",
       html: `
-        <p>Are you sure you want to delete <strong>${user.name}</strong>?</p>
-        <p class="text-sm text-gray-600 mt-2">This will:</p>
-        <ul class="text-sm text-left text-gray-600 mt-2 ml-4">
-          <li>• Remove user from Firestore</li>
-          <li>• User will not be able to access the system</li>
-          <li>• This action cannot be undone</li>
-        </ul>
-        <p class="text-xs text-red-600 mt-3">Note: Firebase Auth account will remain but won't have access</p>
+        <p>Remove <strong>${escapeHtml(member.name)}</strong> (${escapeHtml(member.email)})? They will no longer be able to sign in.</p>
+        <p class="text-xs text-gray-500 mt-3">Their Google or password account itself is not deleted.</p>
       `,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#dc2626",
-      confirmButtonText: "Yes, delete",
+      confirmButtonText: "Yes, remove",
     });
 
     if (result.isConfirmed) {
       try {
-        await deleteDoc(doc(db, "users", user.id));
-        await loadUsers();
+        await removeMember(member.email);
 
         Swal.fire({
           icon: "success",
-          title: "Deleted!",
+          title: "Removed!",
           text: "User has been removed",
           timer: 1500,
           showConfirmButton: false,
         });
       } catch (error) {
-        console.error("Error deleting user:", error);
+        console.error("Error removing member:", error);
         Swal.fire({
           icon: "error",
-          title: "Delete Failed",
-          text: "Failed to delete user",
+          title: "Remove Failed",
+          text: accessErrorMessage(error, "members"),
         });
+      } finally {
+        await loadUsers();
       }
     }
   }
@@ -290,6 +253,22 @@ export default function Users({ currentUser }: { currentUser: User }) {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400">Loading users...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6 flex items-center justify-center h-96">
+        <div className="text-center max-w-md">
+          <p className="text-red-600 dark:text-red-400 font-medium">{loadError}</p>
+          <button
+            onClick={() => loadUsers()}
+            className="mt-4 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -322,7 +301,7 @@ export default function Users({ currentUser }: { currentUser: User }) {
               <UsersIcon className="text-blue-600 dark:text-blue-300" size={24} />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{users.length}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{members.length}</p>
               <p className="text-sm text-gray-600 dark:text-gray-400">Total Users</p>
             </div>
           </div>
@@ -335,7 +314,7 @@ export default function Users({ currentUser }: { currentUser: User }) {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {users.filter(u => u.role === "Admin").length}
+                {members.filter(m => m.role === "Admin").length}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">Admins</p>
             </div>
@@ -349,7 +328,7 @@ export default function Users({ currentUser }: { currentUser: User }) {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {users.filter(u => u.role === "IT Manager" || u.role === "HR Manager").length}
+                {members.filter(m => m.role === "IT Manager" || m.role === "HR Manager").length}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">Managers</p>
             </div>
@@ -363,7 +342,7 @@ export default function Users({ currentUser }: { currentUser: User }) {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {users.filter(u => u.role === "Viewer").length}
+                {members.filter(m => m.role === "Viewer").length}
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">Viewers</p>
             </div>
@@ -385,61 +364,65 @@ export default function Users({ currentUser }: { currentUser: User }) {
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
-              <tr
-                key={user.id}
-                className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-green-600 text-white flex items-center justify-center font-semibold">
-                      {user.name && user.name.length > 0 ? user.name[0].toUpperCase() : "?"}
+            {members.map((member) => {
+              const removeProblem = memberChangeProblem(currentUser.email, member, { kind: "remove" });
+              return (
+                <tr
+                  key={member.email}
+                  className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-green-600 text-white flex items-center justify-center font-semibold">
+                        {member.name && member.name.length > 0 ? member.name[0].toUpperCase() : "?"}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-white">{member.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{member.email}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{user.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">ID: {user.id.slice(0, 8)}...</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                      <Mail size={14} />
+                      {member.email}
                     </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                    <Mail size={14} />
-                    {user.email}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)}`}>
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
-                  {user.department || "—"}
-                </td>
-                <td className="px-6 py-4 text-gray-700 dark:text-gray-300 text-xs">
-                  {new Date(user.createdAt).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => handleEditUser(user)}
-                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                      title="Edit user"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteUser(user)}
-                      className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                      title="Delete user"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(member.role)}`}>
+                      {member.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
+                    {member.department || "—"}
+                  </td>
+                  <td className="px-6 py-4 text-gray-700 dark:text-gray-300 text-xs">
+                    {new Date(member.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleEditUser(member)}
+                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                        title="Edit user"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={() => !removeProblem && handleDeleteUser(member)}
+                        disabled={!!removeProblem}
+                        className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={removeProblem || "Remove user"}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
 
-            {users.length === 0 && (
+            {members.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-center py-12 text-gray-400 dark:text-gray-500">
                   No users found. Click "Add User" to create one.
@@ -452,5 +435,3 @@ export default function Users({ currentUser }: { currentUser: User }) {
     </div>
   );
 }
-
-

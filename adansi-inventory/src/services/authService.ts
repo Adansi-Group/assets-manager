@@ -1,7 +1,6 @@
-import { 
-  signInWithEmailAndPassword, 
+import {
+  signInWithEmailAndPassword,
   signOut,
-  createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider
 } from "firebase/auth";
@@ -22,10 +21,4 @@ export async function loginWithGoogle() {
 export async function logout() {
   return await signOut(auth);
 }
-
-// Register new user
-export async function register(email: string, password: string) {
-  return await createUserWithEmailAndPassword(auth, email, password);
-}
-
 
