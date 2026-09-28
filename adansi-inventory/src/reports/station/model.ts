@@ -10,7 +10,7 @@
 // Pure data: no React, no Firestore, no jsPDF. narrateStation() turns it into
 // prose.
 
-import type { Toner, TonerReplacement, TonerStock } from "../../types/toner";
+import type { Toner, TonerDelivery, TonerReplacement, TonerStock } from "../../types/toner";
 import type { A4Sheet } from "../../types/A4Sheet";
 import type { Gadget } from "../../types/gadget";
 import type { Printer } from "../../types/printer";
@@ -18,6 +18,7 @@ import { inRange, toISODate, type Range } from "../shared/period";
 import { joinList, verbHave } from "../shared/text";
 import { replacementIntervals } from "../shared/replacementIntervals";
 import { lowToners } from "../../toners/stockLevel";
+import { poolKey } from "../../toners/pools";
 import { buildGadgetReport } from "../gadgets/buildModel";
 import type { DataGap, GadgetReportModel, Tally } from "../gadgets/model";
 import { buildConsumablesModel } from "../consumables/model";
@@ -97,7 +98,16 @@ export interface ActivitySection {
   /** Devices with no createdAt at all, so they cannot be placed in any month. */
   gadgetsUndated: number;
   a4Restocked: A4Restock[];
-  /** Toner stock records first entered during the period. */
+  /** Toner deliveries received during the period — the true record of stock coming in. */
+  tonerDeliveries: TonerDelivery[];
+  /** Cartridges across those deliveries. */
+  cartridgesReceived: number;
+  /** Cartridges received per pool, keyed "Colour Cartridge" (e.g. "Black 222A"). */
+  cartridgesReceivedByCartridge: Tally[];
+  /**
+   * Legacy toner stock records first entered during the period. The history
+   * for months before pooling; pools themselves are never counted here.
+   */
   tonersBroughtRecords: Toner[];
   tonersBrought: number;
   /** True when the period holds no recorded activity of any kind. */
@@ -120,11 +130,12 @@ export interface StationReportModel {
 export interface StationInput {
   /**
    * Legacy per-printer toner records. Stock levels moved to pooled `stock`;
-   * this is kept only for `tonersBroughtRecords`, the one figure that is a
-   * true dated history — new stock records brought in during a month — which
-   * pooling has no equivalent of yet.
+   * this is kept only for `tonersBroughtRecords`, the dated history of stock
+   * brought in before pooling. Deliveries since then are `deliveries`.
    */
   toners: Toner[];
+  /** Dated toner deliveries into the central store. */
+  deliveries: TonerDelivery[];
   /** Pooled cartridge stock: one record per cartridge and colour. */
   stock: TonerStock[];
   replacements: TonerReplacement[];
@@ -210,6 +221,28 @@ function buildA4(sheets: A4Sheet[]): A4Section {
   };
 }
 
+/**
+ * Cartridges received per pool. Grouped the way pools are addressed, so
+ * "black 222a" and "Black 222A" are one line; labelled as first recorded.
+ */
+function receivedByCartridge(deliveries: TonerDelivery[]): Tally[] {
+  const lines = new Map<string, Tally>();
+  for (const d of deliveries) {
+    const key = poolKey(d.tonerType, d.colorType);
+    const line = lines.get(key);
+    if (line) line.count += positive(d.quantity);
+    else {
+      lines.set(key, {
+        key: `${d.colorType?.trim() ?? ""} ${d.tonerType?.trim() ?? ""}`.trim(),
+        count: positive(d.quantity),
+      });
+    }
+  }
+  return [...lines.values()]
+    .filter(line => line.count > 0)
+    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
 /** "All time" spans every date, so only narrow the set when a real period is set. */
 const isAllTime = (range: Range) => range.start === "0000-01-01" && range.end === "9999-12-31";
 
@@ -244,6 +277,11 @@ function buildActivity(input: StationInput): ActivitySection {
 
   const tonersBroughtRecords = input.toners.filter(t => within(t.dateBrought));
 
+  const tonerDeliveries = input.deliveries
+    .filter(d => toISODate(d.dateReceived) && within(d.dateReceived))
+    .sort((a, b) => a.dateReceived.localeCompare(b.dateReceived));
+  const cartridgesReceived = tonerDeliveries.reduce((sum, d) => sum + positive(d.quantity), 0);
+
   return {
     label: range.label,
     filtered,
@@ -255,13 +293,17 @@ function buildActivity(input: StationInput): ActivitySection {
     gadgetsAddedByType: tally(gadgetsAdded.map(g => g.deviceType)),
     gadgetsUndated: input.gadgets.filter(g => !toISODate(g.createdAt)).length,
     a4Restocked,
+    tonerDeliveries,
+    cartridgesReceived,
+    cartridgesReceivedByCartridge: receivedByCartridge(tonerDeliveries),
     tonersBroughtRecords,
     tonersBrought: tonersBroughtRecords.length,
     empty:
       tonerReplacements.length === 0 &&
       gadgetsAdded.length === 0 &&
       a4Restocked.length === 0 &&
-      tonersBroughtRecords.length === 0,
+      tonersBroughtRecords.length === 0 &&
+      cartridgesReceived === 0,
   };
 }
 

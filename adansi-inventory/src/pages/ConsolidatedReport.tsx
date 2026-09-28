@@ -1,24 +1,27 @@
 import { useState, useEffect, useMemo } from "react";
-import { Download, DollarSign, TrendingUp, Calendar, PieChart, Package } from "lucide-react";
+import { Download, DollarSign, TrendingUp, Calendar, PieChart, Package, AlertTriangle } from "lucide-react";
 import { getToners } from "../services/tonerService";
+import { getTonerDeliveries } from "../services/tonerDeliveryService";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
 import { getGadgets } from "../services/gadgetsService";
 import { getPrinters } from "../services/printerService";
 import { getInventoryItems } from "../services/inventoryService";
 import { getAllReplacements } from "../services/Tonerreplacementservice";
-import type { Toner, TonerReplacement } from "../types/toner";
+import type { Toner, TonerDelivery, TonerReplacement } from "../types/toner";
 import type { A4Sheet } from "../types/A4Sheet";
 import type { InternetUsage } from "../types/InternetUsage";
 import type { Gadget } from "../types/gadget";
 import type { Printer } from "../types/printer";
 import type { InventoryItem } from "../types/inventory";
 import { inRange, resolveRange, toISODate, type Quarter } from "../reports/shared/period";
+import { tonersAcquired } from "../reports/shared/tonersAcquired";
 
 // ---- Component --------------------------------------------------------------
 
 interface AllData {
   toners: Toner[];
+  deliveries: TonerDelivery[];
   a4Sheets: A4Sheet[];
   internet: InternetUsage[];
   gadgets: Gadget[];
@@ -29,6 +32,7 @@ interface AllData {
 
 const EMPTY: AllData = {
   toners: [],
+  deliveries: [],
   a4Sheets: [],
   internet: [],
   gadgets: [],
@@ -39,6 +43,7 @@ const EMPTY: AllData = {
 
 export default function ConsolidatedReport() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [data, setData] = useState<AllData>(EMPTY);
 
   // Period controls — default to the current quarter/year, common reporting need.
@@ -57,18 +62,28 @@ export default function ConsolidatedReport() {
 
   async function loadData() {
     setLoading(true);
-    const [toners, a4Sheets, internet, gadgets, printers, inventory, replacements] =
-      await Promise.all([
-        getToners(),
-        getA4Sheets(),
-        getInternetUsage(),
-        getGadgets(),
-        getPrinters(),
-        getInventoryItems(),
-        getAllReplacements(),
-      ]);
-    setData({ toners, a4Sheets, internet, gadgets, printers, inventory, replacements });
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const [toners, deliveries, a4Sheets, internet, gadgets, printers, inventory, replacements] =
+        await Promise.all([
+          getToners(),
+          // Throws on failure: a report of zero toners acquired would be false.
+          getTonerDeliveries(),
+          getA4Sheets(),
+          getInternetUsage(),
+          getGadgets(),
+          getPrinters(),
+          getInventoryItems(),
+          getAllReplacements(),
+        ]);
+      setData({ toners, deliveries, a4Sheets, internet, gadgets, printers, inventory, replacements });
+    } catch (error) {
+      console.error("Error loading consolidated report:", error);
+      setData(EMPTY);
+      setLoadError(error instanceof Error ? error.message : "Could not load the report data.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -77,10 +92,11 @@ export default function ConsolidatedReport() {
 
   // ---- Period-filtered metrics ----------------------------------------------
   const m = useMemo(() => {
-    // Toners acquired within the period
-    const toners = data.toners.filter((t) => inRange(toISODate(t.dateBrought), range));
-    const tonerUnits = toners.reduce((s, t) => s + (t.quantity || 0), 0);
-    const tonerCost = toners.reduce((s, t) => s + (t.quantity || 0) * (t.costPerUnit || 0), 0);
+    // Toners acquired within the period: recorded deliveries, plus the legacy
+    // stock records from before pooling. Never the pools themselves.
+    const toners = tonersAcquired(data.deliveries, data.toners, range);
+    const tonerUnits = toners.units;
+    const tonerCost = toners.cost;
 
     // Toner replacements performed within the period
     const replacements = data.replacements.filter((r) =>
@@ -156,7 +172,7 @@ export default function ConsolidatedReport() {
       ["Generated:", new Date().toLocaleString()],
       [""],
       ["Category", "Items in period", "Units", "Known cost (GH₵)"],
-      ["Toners acquired", m.toners.length, m.tonerUnits, m.tonerCost.toFixed(2)],
+      ["Toners acquired", m.toners.deliveries + m.toners.legacyRecords, m.tonerUnits, m.tonerCost.toFixed(2)],
       ["Toner replacements", m.replacements.length, "", ""],
       ["A4 sheet restocks", m.a4Events.length, m.a4ReamsAdded, m.a4PeriodSpend.toFixed(2)],
       ["Internet purchases", m.internet.length, "", m.internetCost.toFixed(2)],
@@ -183,6 +199,35 @@ export default function ConsolidatedReport() {
     return (
       <div className="p-6 flex items-center justify-center h-96">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    // No figures at all rather than zeros: the reader must not mistake a
+    // failed read for a quiet period.
+    return (
+      <div className="p-6">
+        <div
+          role="alert"
+          className="bg-red-50 dark:bg-red-950/40 border-l-4 border-red-500 rounded-r-lg p-5"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" size={22} />
+            <div className="flex-1">
+              <p className="font-bold text-red-800 dark:text-red-300">
+                Could not load the consolidated report
+              </p>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-0.5">{loadError}</p>
+              <button
+                onClick={() => void loadData()}
+                className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -313,8 +358,8 @@ export default function ConsolidatedReport() {
         <MetricCard
           title="Toners acquired"
           icon="💧"
-          primary={`${m.toners.length}`}
-          primaryLabel="records"
+          primary={`${m.toners.deliveries + m.toners.legacyRecords}`}
+          primaryLabel="deliveries and stock records"
           secondary={`${m.tonerUnits} units · GH₵${m.tonerCost.toFixed(2)}`}
           extra={`${m.replacements.length} replacements in period`}
           color="bg-blue-600"

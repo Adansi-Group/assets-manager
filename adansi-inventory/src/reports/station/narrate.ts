@@ -52,8 +52,8 @@ function opening(model: StationReportModel): Block[] {
     return [
       para(
         lead,
-        `Nothing was recorded in ${period}: no devices added, no toner replacements and no paper ` +
-          `restocked. That is a quiet month in the records rather than an empty store.`
+        `Nothing was recorded in ${period}: no devices added, no toner replaced or received and no ` +
+          `paper restocked. That is a quiet month in the records rather than an empty store.`
       ),
     ];
   }
@@ -68,6 +68,12 @@ function opening(model: StationReportModel): Block[] {
     counts.push(
       `${activity.tonerReplacements.length} toner ` +
         `${pluralize(activity.tonerReplacements.length, "replacement")}`
+    );
+  }
+  if (activity.cartridgesReceived > 0) {
+    counts.push(
+      `${activity.cartridgesReceived} toner ` +
+        `${pluralize(activity.cartridgesReceived, "cartridge")} received`
     );
   }
   if (activity.tonersBrought > 0) {
@@ -118,6 +124,19 @@ function gadgetParagraphs(model: StationReportModel): Block[] {
   ];
 }
 
+/** "6 toner cartridges were received during the month: 4 Black 222A and 2 Cyan 069." */
+function receivedSentence(model: StationReportModel): string {
+  const { activity } = model;
+  const received = activity.cartridgesReceived;
+  const lines = activity.cartridgesReceivedByCartridge;
+  const when = activity.filtered ? "during the month" : `in ${activity.label}`;
+
+  return (
+    `${received} toner ${pluralize(received, "cartridge")} ${verbWas(received)} received ${when}` +
+    (lines.length > 0 ? `: ${joinListCapped(lines.map(l => `${l.count} ${l.key}`), 6)}.` : ".")
+  );
+}
+
 /* ------------------------------------------------------------------ */
 
 function tonerParagraphs(model: StationReportModel): Block[] {
@@ -125,8 +144,9 @@ function tonerParagraphs(model: StationReportModel): Block[] {
   const period = activity.label;
   const replaced = activity.tonerReplacements.length;
   const brought = activity.tonersBrought;
+  const received = activity.cartridgesReceived;
 
-  if (replaced === 0 && brought === 0) {
+  if (replaced === 0 && brought === 0 && received === 0) {
     return [
       heading(2, "Toners"),
       para(`No toner replacements or new toner stock were recorded in ${period}.`),
@@ -150,6 +170,7 @@ function tonerParagraphs(model: StationReportModel): Block[] {
         ? `The printers involved were ` +
           `${joinListCapped(activity.tonerReplacementsByPrinter.map(p => p.key), 4)}.`
         : null,
+      received > 0 ? receivedSentence(model) : null,
       brought > 0
         ? `${brought} new toner stock ${pluralize(brought, "record")} ${verbWas(brought)} entered ` +
           `during the month.`

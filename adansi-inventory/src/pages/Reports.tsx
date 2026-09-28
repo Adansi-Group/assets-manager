@@ -22,13 +22,14 @@ import { buildStationReport } from "../reports/station/model";
 import { narrateStation } from "../reports/station/narrate";
 import { getToners } from "../services/tonerService";
 import { getTonerStock } from "../services/tonerStockService";
+import { getTonerDeliveries } from "../services/tonerDeliveryService";
 import { getPrintersStrict } from "../services/printerService";
 import { getTonerReorderLevel } from "../services/notificationService";
 import { getAllReplacements } from "../services/Tonerreplacementservice";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
 import { getGadgets } from "../services/gadgetsService";
-import type { Toner, TonerReplacement, TonerStock } from "../types/toner";
+import type { Toner, TonerDelivery, TonerReplacement, TonerStock } from "../types/toner";
 import type { A4Sheet } from "../types/A4Sheet";
 import type { InternetUsage } from "../types/InternetUsage";
 import type { Gadget } from "../types/gadget";
@@ -64,6 +65,7 @@ export default function Reports() {
 
   const [toners, setToners] = useState<Toner[]>([]);
   const [stock, setStock] = useState<TonerStock[]>([]);
+  const [deliveries, setDeliveries] = useState<TonerDelivery[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [replacements, setReplacements] = useState<TonerReplacement[]>([]);
   const [sheets, setSheets] = useState<A4Sheet[]>([]);
@@ -90,9 +92,11 @@ export default function Reports() {
     setLoading(true);
     setError(null);
     try {
-      const [t, st, p, r, s, i, g, level] = await Promise.all([
+      const [t, st, d, p, r, s, i, g, level] = await Promise.all([
         getToners(),
         getTonerStock(),
+        // Throws on failure, so the page shows an error rather than "none received".
+        getTonerDeliveries(),
         getPrintersStrict(),
         getAllReplacements(),
         getA4Sheets(),
@@ -102,6 +106,7 @@ export default function Reports() {
       ]);
       setToners(t);
       setStock(st);
+      setDeliveries(d);
       setPrinters(p);
       setReplacements(r);
       setSheets(s);
@@ -133,6 +138,7 @@ export default function Reports() {
       buildStationReport({
         toners,
         stock,
+        deliveries,
         printers,
         replacements,
         sheets,
@@ -141,7 +147,7 @@ export default function Reports() {
         reorderLevel,
         generatedAt: new Date().toISOString().slice(0, 10),
       }),
-    [toners, stock, printers, replacements, sheets, gadgets, period, reorderLevel]
+    [toners, stock, deliveries, printers, replacements, sheets, gadgets, period, reorderLevel]
   );
 
   const blocks = useMemo(() => narrateStation(stationModel), [stationModel]);

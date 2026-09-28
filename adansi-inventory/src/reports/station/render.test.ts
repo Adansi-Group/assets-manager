@@ -21,6 +21,9 @@ describe("the station report renders to a PDF", () => {
         { id:"s2", tonerType:"203A", colorType:"Cyan", quantity:0, dateBrought:"2026-01-05", status:"Critical" },
         { id:"s3", tonerType:"NPG-59", colorType:"Black", quantity:2, dateBrought:"2026-03-11", status:"Warning" },
       ] as TonerStock[],
+      deliveries: [
+        { id:"d1", tonerType:"59A", colorType:"Black", quantity:3, dateReceived:"2026-02-10" },
+      ],
       printers: [
         { id:"p1", location:"Head Office", room:"Accounts", model:"HP LaserJet M404", tonerType:"59A", printerColorType:"black", quantity:1, accessories:[], status:"Active", date:"2026-02-01" },
         { id:"p2", location:"Head Office", model:"HP Color 281", tonerType:"203A", printerColorType:"white", quantity:1, accessories:[], status:"Active", date:"2026-01-05" },

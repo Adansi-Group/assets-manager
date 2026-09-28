@@ -3,7 +3,7 @@ import { buildStationReport, type StationInput } from "./model";
 import { narrateStation } from "./narrate";
 import { monthRange, resolveRange } from "../shared/period";
 import type { Block } from "../shared/blocks";
-import type { Toner, TonerReplacement, TonerStock } from "../../types/toner";
+import type { Toner, TonerDelivery, TonerReplacement, TonerStock } from "../../types/toner";
 import type { A4Sheet } from "../../types/A4Sheet";
 import type { Gadget } from "../../types/gadget";
 import type { Printer } from "../../types/printer";
@@ -68,6 +68,19 @@ const replacement = (
   ...over,
 });
 
+const delivery = (
+  id: string,
+  dateReceived: string,
+  over: Partial<TonerDelivery> = {}
+): TonerDelivery => ({
+  id,
+  tonerType: "222A",
+  colorType: "Black",
+  quantity: 1,
+  dateReceived,
+  ...over,
+});
+
 const sheet = (over: Partial<A4Sheet> & { id: string }): A4Sheet =>
   ({
     officeName: "Nester",
@@ -100,6 +113,7 @@ function august(over: Partial<StationInput> = {}) {
     buildStationReport({
       toners: [toner({ id: "t1" })],
       stock: [pool({ id: "s1" })],
+      deliveries: [],
       printers: [printer({ id: "p1" })],
       replacements: [replacement("r1", "2026-08-04"), replacement("r2", "2026-08-19")],
       sheets: [sheet({ id: "a1", lastRestocked: "2026-08-14" })],
@@ -204,6 +218,7 @@ describe("narrateStation for a single month", () => {
         buildStationReport({
           toners: [toner({ id: "t1" })],
           stock: [pool({ id: "s1" })],
+          deliveries: [],
           printers: [printer({ id: "p1" })],
           replacements: [replacement("r1", "2026-03-04")],
           sheets: [sheet({ id: "a1", lastRestocked: "2026-02-14" })],
@@ -224,6 +239,7 @@ describe("narrateStation for a single month", () => {
       buildStationReport({
         toners: [],
         stock: [],
+        deliveries: [],
         printers: [],
         replacements: [],
         sheets: [],
@@ -242,3 +258,72 @@ describe("narrateStation for a single month", () => {
     expect(allText(august({ gadgets: [], sheets: [] }))).not.toMatch(/\s{2,}|\.\s*\./);
   });
 });
+
+describe("narrateStation toner deliveries", () => {
+  const quiet = { replacements: [], gadgets: [], sheets: [], toners: [] };
+
+  it("says how many cartridges were received and which", () => {
+    const text = allText(
+      august({
+        deliveries: [
+          delivery("d1", "2026-08-03", { tonerType: "222A", colorType: "Black", quantity: 4 }),
+          delivery("d2", "2026-08-21", { tonerType: "CARTRIDGE 069", colorType: "Cyan", quantity: 2 }),
+        ],
+      })
+    );
+
+    expect(text).toContain(
+      "6 toner cartridges were received during the month: 4 Black 222A and 2 Cyan CARTRIDGE 069."
+    );
+  });
+
+  it("uses the singular for one cartridge", () => {
+    const text = allText(august({ deliveries: [delivery("d1", "2026-08-03")] }));
+
+    expect(text).toContain("1 toner cartridge was received during the month");
+    expect(text).not.toMatch(/1 toner cartridges|cartridge were/);
+  });
+
+  it("leaves out deliveries from other months", () => {
+    const text = allText(august({ deliveries: [delivery("d1", "2026-07-30", { quantity: 3 })] }));
+
+    expect(text).not.toMatch(/received/);
+  });
+
+  it("counts deliveries in the summary line", () => {
+    const text = allText(august({ deliveries: [delivery("d1", "2026-08-03", { quantity: 3 })] }));
+
+    expect(text).toMatch(/In short: [^.]*3 toner cartridges received/);
+  });
+
+  it("does not report a month with only deliveries as quiet", () => {
+    const text = allText(
+      august({ ...quiet, deliveries: [delivery("d1", "2026-08-03", { quantity: 2 })] })
+    );
+
+    expect(text).not.toMatch(/nothing was recorded/i);
+    expect(text).not.toMatch(/no toner replacements or new toner stock/i);
+    expect(text).toMatch(/No toner replacements were recorded in August 2026\./);
+    expect(text).toContain("2 toner cartridges were received during the month: 2 Black 222A.");
+    expect(text).toMatch(/In short: 2 toner cartridges received\./);
+  });
+
+  it("keeps the legacy stock-record sentence for months those records fall in", () => {
+    const text = allText(
+      august({
+        toners: [toner({ id: "t1", dateBrought: "2026-08-05" })],
+        deliveries: [delivery("d1", "2026-08-03")],
+      })
+    );
+
+    expect(text).toMatch(/1 new toner stock record was entered/);
+    expect(text).toMatch(/1 toner cartridge was received/);
+  });
+
+  it("still says nothing was received or replaced when neither happened", () => {
+    const text = allText(august({ replacements: [], deliveries: [] }));
+
+    expect(text).toMatch(/No toner replacements or new toner stock were recorded/);
+  });
+});
+

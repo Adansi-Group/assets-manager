@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildStationReport } from "./model";
 import { monthRange, resolveRange } from "../shared/period";
-import type { Toner, TonerReplacement, TonerStock } from "../../types/toner";
+import type { Toner, TonerDelivery, TonerReplacement, TonerStock } from "../../types/toner";
 import type { A4Sheet } from "../../types/A4Sheet";
 import type { Gadget } from "../../types/gadget";
 import type { Printer } from "../../types/printer";
@@ -54,6 +54,19 @@ const replacement = (id: string, dateReplaced: string): TonerReplacement => ({
   createdAt: dateReplaced,
 });
 
+const delivery = (
+  id: string,
+  dateReceived: string,
+  over: Partial<TonerDelivery> = {}
+): TonerDelivery => ({
+  id,
+  tonerType: "222A",
+  colorType: "Black",
+  quantity: 1,
+  dateReceived,
+  ...over,
+});
+
 const sheet = (over: Partial<A4Sheet> & { id: string }): A4Sheet =>
   ({
     officeName: "Head Office",
@@ -76,6 +89,7 @@ function build(over: Partial<Parameters<typeof buildStationReport>[0]> = {}) {
   return buildStationReport({
     toners: [toner({ id: "t1" })],
     stock: [pool({ id: "s1" })],
+    deliveries: [],
     printers: [printer({ id: "p1" })],
     replacements: [],
     sheets: [sheet({ id: "a1" })],
@@ -91,6 +105,7 @@ describe("buildStationReport", () => {
   it("rolls up stock across toners and A4", () => {
     const model = build({
       stock: [pool({ id: "s1", quantity: 3 }), pool({ id: "s2", quantity: 5, tonerType: "207A" })],
+      deliveries: [],
       sheets: [
         sheet({ id: "a1", currentQuantity: 2, costPerReam: 40 }),
         sheet({ id: "a2", currentQuantity: 10, costPerReam: 40, officeName: "Accra" }),
@@ -193,6 +208,7 @@ describe("buildStationReport", () => {
     const model = buildStationReport({
       toners: [],
       stock: [],
+      deliveries: [],
       printers: [],
       replacements: [],
       sheets: [],
@@ -274,6 +290,7 @@ describe("buildStationReport activity", () => {
       range: AUGUST,
       gadgets: [gadgetOn("g1", "2026-08-12"), gadgetOn("g2", "2026-06-01")],
       stock: [pool({ id: "s1", quantity: 4 })],
+      deliveries: [],
     });
 
     // Both devices are still on the books today, whatever month they arrived.
@@ -356,5 +373,67 @@ describe("buildStationReport activity detail", () => {
 
     expect(model.activity.tonersBroughtRecords).toHaveLength(1);
     expect(model.activity.tonersBrought).toBe(1);
+  });
+
+  it("counts the cartridges received in the period and breaks them down", () => {
+    const model = build({
+      range: AUGUST,
+      deliveries: [
+        delivery("d1", "2026-08-03", { tonerType: "222A", colorType: "Black", quantity: 3 }),
+        delivery("d2", "2026-08-21", { tonerType: "CARTRIDGE 069", colorType: "Cyan", quantity: 2 }),
+        // Same pool typed differently: one line, not two.
+        delivery("d3", "2026-08-25", { tonerType: " 222a ", colorType: "black", quantity: 1 }),
+      ],
+    });
+
+    expect(model.activity.tonerDeliveries.map(d => d.id)).toEqual(["d1", "d2", "d3"]);
+    expect(model.activity.cartridgesReceived).toBe(6);
+    expect(model.activity.cartridgesReceivedByCartridge).toEqual([
+      { key: "Black 222A", count: 4 },
+      { key: "Cyan CARTRIDGE 069", count: 2 },
+    ]);
+  });
+
+  it("ignores deliveries received outside the period", () => {
+    const model = build({
+      range: AUGUST,
+      deliveries: [
+        delivery("d1", "2026-07-31", { quantity: 5 }),
+        delivery("d2", "2026-09-01", { quantity: 7 }),
+        delivery("d3", "2026-08-15", { quantity: 2 }),
+      ],
+    });
+
+    expect(model.activity.tonerDeliveries.map(d => d.id)).toEqual(["d3"]);
+    expect(model.activity.cartridgesReceived).toBe(2);
+  });
+
+  it("does not call a month with only deliveries empty", () => {
+    const model = build({
+      range: AUGUST,
+      toners: [],
+      replacements: [],
+      sheets: [],
+      gadgets: [],
+      deliveries: [delivery("d1", "2026-08-15")],
+    });
+
+    expect(model.activity.empty).toBe(false);
+  });
+
+  it("never counts a stock pool as a delivery", () => {
+    const model = build({
+      range: AUGUST,
+      toners: [],
+      stock: [pool({ id: "s1", dateBrought: "2026-08-10", quantity: 9 })],
+      replacements: [],
+      sheets: [],
+      gadgets: [],
+      deliveries: [],
+    });
+
+    expect(model.activity.cartridgesReceived).toBe(0);
+    expect(model.activity.tonersBrought).toBe(0);
+    expect(model.activity.empty).toBe(true);
   });
 });
