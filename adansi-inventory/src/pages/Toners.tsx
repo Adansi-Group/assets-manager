@@ -14,7 +14,7 @@ import type { TonerStock } from "../types/toner";
 import { lowToners } from "../toners/stockLevel";
 import { findPool, isInService, normalizeType, printersUsing } from "../toners/pools";
 import { deliveryProblem } from "../toners/deliveries";
-import { canonicalColour, TONER_COLOURS, withCanonicalColour } from "../toners/colours";
+import { canonicalColour, colourChoices, withCanonicalColour } from "../toners/colours";
 import {
   findPoolCollisions,
   groupPools,
@@ -158,17 +158,15 @@ export default function Toners() {
   }, []);
 
   async function handleColorSelect(row: CartridgeRow) {
-    // The fixed list, plus each existing pool's own (correctly-cased)
-    // colour name, deduplicated by normalized value so a pool never shows
-    // up twice under two spellings.
-    const seen = new Set<string>();
-    const colours: string[] = [];
-    for (const label of [...TONER_COLOURS, ...Object.values(row.colors).map((p) => p.colorType)]) {
-      const key = normalizeType(label);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      colours.push(label);
-    }
+    // The colours this cartridge comes in, plus any other colour it holds
+    // stock under, so cartridges on the shelf never go missing. An empty
+    // record under a colour it does not come in is left out.
+    const colours = colourChoices(
+      row.tonerType,
+      Object.values(row.colors)
+        .filter((p) => p.quantity > 0)
+        .map((p) => p.colorType)
+    );
 
     await Swal.fire({
       title: "Select Color to View",
@@ -315,6 +313,24 @@ export default function Toners() {
       cartridges.push(name.trim());
     }
 
+    // Only the colours the chosen cartridge comes in (plus any it already
+    // has stock under): a PIXMA has Black and Color, nothing else has Color.
+    const colourOptions = (cartridge: string) =>
+      '<option value="">Select colour</option>' +
+      colourChoices(
+        cartridge,
+        pools
+          .filter(
+            (p) =>
+              cartridge &&
+              p.quantity > 0 &&
+              normalizeType(p.tonerType) === normalizeType(cartridge)
+          )
+          .map((p) => p.colorType)
+      )
+        .map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)
+        .join("");
+
     const field = "margin: 0; width: 100%;";
     const label = 'class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"';
 
@@ -338,8 +354,7 @@ export default function Toners() {
           <div>
             <label for="delivery-colour" ${label}>Colour</label>
             <select id="delivery-colour" class="swal2-select" style="${field}">
-              <option value="">Select colour</option>
-              ${TONER_COLOURS.map((c) => `<option value="${c}">${c}</option>`).join("")}
+              ${colourOptions("")}
             </select>
           </div>
           <div>
@@ -359,6 +374,16 @@ export default function Toners() {
       showCancelButton: true,
       confirmButtonText: "Record delivery",
       confirmButtonColor: "#16a34a",
+      didOpen: () => {
+        const cartridge = document.getElementById("delivery-cartridge") as HTMLSelectElement;
+        const colour = document.getElementById("delivery-colour") as HTMLSelectElement;
+        cartridge.addEventListener("change", () => {
+          const chosen = colour.value;
+          colour.innerHTML = colourOptions(cartridge.value);
+          // Keep the colour if the new cartridge also comes in it.
+          colour.value = [...colour.options].some((o) => o.value === chosen) ? chosen : "";
+        });
+      },
       preConfirm: () => {
         const value = (id: string) =>
           (document.getElementById(id) as HTMLInputElement | HTMLSelectElement).value.trim();

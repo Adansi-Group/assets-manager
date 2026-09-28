@@ -12,7 +12,7 @@ import { X, Plus } from "lucide-react";
 import Swal from "sweetalert2";
 import type { TonerStock } from "../types/toner";
 import { getAllTonerTypes, addTonerType } from "../services/tonerService";
-import { optionsKeeping, TONER_COLOURS } from "../toners/colours";
+import { coloursFor, optionsKeeping } from "../toners/colours";
 import { accessErrorMessage } from "../toners/accessErrors";
 import { correctionHint } from "../toners/corrections";
 import { TONER_STOCK_COLLECTION } from "../services/tonerStockService";
@@ -199,7 +199,11 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
                 <div className="flex gap-2">
                   <select
                     value={tonerType}
-                    onChange={(e) => setTonerType(e.target.value)}
+                    onChange={(e) => {
+                      setTonerType(e.target.value);
+                      // A colour the new cartridge does not come in is not carried over.
+                      if (!coloursFor(e.target.value).includes(colorType)) setColorType("");
+                    }}
                     className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-green-500 focus:outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     required
                     disabled={loadingTypes}
@@ -239,9 +243,10 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
                   required
                 >
                   <option value="">Select color</option>
-                  {/* One list for every screen; a PIXMA uses Black and Color.
-                      A saved colour outside the list is kept, not blanked. */}
-                  {optionsKeeping(TONER_COLOURS, colorType).map((colour) => (
+                  {/* Only the colours this cartridge comes in: a PIXMA uses
+                      Black and Color, nothing else has Color. A saved colour
+                      outside the list is kept, not blanked. */}
+                  {optionsKeeping(coloursFor(tonerType), colorType).map((colour) => (
                     <option key={colour} value={colour}>
                       {colour}
                     </option>

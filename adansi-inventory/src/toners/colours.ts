@@ -16,6 +16,36 @@ import { normalizeType } from "./pools";
 /** Every colour a pool can have. PIXMA pools use Black and Color. */
 export const TONER_COLOURS = ["Black", "Cyan", "Magenta", "Yellow", "Color"] as const;
 
+const FOUR_COLOURS = ["Black", "Cyan", "Magenta", "Yellow"] as const;
+const PIXMA_COLOURS = ["Black", "Color"] as const;
+
+/**
+ * The colours this cartridge comes in. A PIXMA takes one Black and one
+ * combined Color cartridge; everything else comes in the four toner colours
+ * and has no "Color".
+ */
+export function coloursFor(tonerType: string): readonly string[] {
+  return normalizeType(tonerType).includes("pixma") ? PIXMA_COLOURS : FOUR_COLOURS;
+}
+
+/**
+ * The colours to offer for this cartridge: its own, then any colour it
+ * holds stock under — so cartridges filed under a colour it should not have
+ * stay reachable instead of vanishing from the screen. Callers pass only
+ * the colours of pools that are not empty.
+ */
+export function colourChoices(tonerType: string, inStock: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const choices: string[] = [];
+  for (const colour of [...coloursFor(tonerType), ...inStock]) {
+    const key = normalizeType(colour);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    choices.push(colour.trim());
+  }
+  return choices;
+}
+
 const LEGACY_COLOURS: Record<string, string> = {
   "black pixma": "Black",
   "color pixma": "Color",

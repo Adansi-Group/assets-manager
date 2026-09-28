@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { canonicalColour, optionsKeeping, TONER_COLOURS, withCanonicalColour } from "./colours";
+import {
+  canonicalColour,
+  colourChoices,
+  coloursFor,
+  optionsKeeping,
+  TONER_COLOURS,
+  withCanonicalColour,
+} from "./colours";
 
 describe("TONER_COLOURS", () => {
   it("is Black, Cyan, Magenta, Yellow and Color", () => {
@@ -48,5 +55,43 @@ describe("optionsKeeping", () => {
   it("leaves the list alone when the saved value is one of the options, or empty", () => {
     expect(optionsKeeping(TONER_COLOURS, "Color")).toEqual([...TONER_COLOURS]);
     expect(optionsKeeping(TONER_COLOURS, "")).toEqual([...TONER_COLOURS]);
+  });
+});
+
+describe("coloursFor", () => {
+  it("offers the four toner colours for an ordinary cartridge, and no Color", () => {
+    expect(coloursFor("CARTRIDGE 069")).toEqual(["Black", "Cyan", "Magenta", "Yellow"]);
+    expect(coloursFor("415A")).toEqual(["Black", "Cyan", "Magenta", "Yellow"]);
+  });
+
+  it("offers only Black and Color for a PIXMA, however it is written", () => {
+    expect(coloursFor("PIXMA 446")).toEqual(["Black", "Color"]);
+    expect(coloursFor("  pixma   446 ")).toEqual(["Black", "Color"]);
+    expect(coloursFor("Canon Pixma TS3440")).toEqual(["Black", "Color"]);
+  });
+
+  it("offers the four toner colours before a cartridge is chosen", () => {
+    expect(coloursFor("")).toEqual(["Black", "Cyan", "Magenta", "Yellow"]);
+  });
+});
+
+describe("colourChoices", () => {
+  it("is just the cartridge's own colours when nothing unusual is in stock", () => {
+    expect(colourChoices("CARTRIDGE 069", ["Black", "Cyan", "Magenta", "Yellow"])).toEqual([
+      "Black",
+      "Cyan",
+      "Magenta",
+      "Yellow",
+    ]);
+    expect(colourChoices("PIXMA 446", [])).toEqual(["Black", "Color"]);
+  });
+
+  it("never hides stock that exists under a colour the cartridge should not have", () => {
+    expect(colourChoices("PIXMA 446", ["Color", "Cyan"])).toEqual(["Black", "Color", "Cyan"]);
+    expect(colourChoices("415A", ["Color"])).toEqual(["Black", "Cyan", "Magenta", "Yellow", "Color"]);
+  });
+
+  it("does not list one colour twice under two spellings", () => {
+    expect(colourChoices("415A", ["black", " Cyan "])).toEqual(["Black", "Cyan", "Magenta", "Yellow"]);
   });
 });
