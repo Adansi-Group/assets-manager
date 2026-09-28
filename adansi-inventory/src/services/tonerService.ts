@@ -52,6 +52,27 @@ export async function getToners(): Promise<Toner[]> {
   }
 }
 
+/**
+ * The same read as `getToners`, but a failure throws instead of returning [].
+ *
+ * The reports count legacy records as stock acquired; an empty list on a
+ * failed read would silently understate that figure. `getToners` itself is
+ * left as is because the migration depends on its behaviour.
+ */
+export async function getTonersStrict(): Promise<Toner[]> {
+  const q = query(collection(db, TONERS_COLLECTION), orderBy("dateBrought", "desc"));
+  const [snapshot, reorderLevel] = await Promise.all([getDocs(q), getTonerReorderLevel()]);
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data() as Omit<Toner, "id">;
+    return {
+      id: doc.id,
+      ...data,
+      status: tonerStatus(data.quantity, reorderLevel),
+    };
+  });
+}
+
 // ADD NEW TONER
 export async function addToner(toner: Omit<Toner, "id">): Promise<void> {
   try {

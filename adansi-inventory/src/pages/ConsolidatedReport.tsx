@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Download, DollarSign, TrendingUp, Calendar, PieChart, Package, AlertTriangle } from "lucide-react";
-import { getToners } from "../services/tonerService";
+import { getTonersStrict } from "../services/tonerService";
 import { getTonerDeliveries } from "../services/tonerDeliveryService";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
@@ -66,7 +66,7 @@ export default function ConsolidatedReport() {
     try {
       const [toners, deliveries, a4Sheets, internet, gadgets, printers, inventory, replacements] =
         await Promise.all([
-          getToners(),
+          getTonersStrict(),
           // Throws on failure: a report of zero toners acquired would be false.
           getTonerDeliveries(),
           getA4Sheets(),

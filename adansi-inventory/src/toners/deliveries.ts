@@ -24,8 +24,11 @@ function isRealDate(value: string): boolean {
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
-/** Why this delivery cannot be recorded, or null when it can. */
-export function deliveryProblem(input: DeliveryInput): string | null {
+/**
+ * Why this delivery cannot be recorded, or null when it can. `today` is
+ * YYYY-MM-DD, passed in so this stays free of a hidden clock read.
+ */
+export function deliveryProblem(today: string, input: DeliveryInput): string | null {
   if (!input.tonerType?.trim()) return "Choose the cartridge that was delivered.";
   if (!input.colorType?.trim()) return "Choose the colour that was delivered.";
   if (!Number.isInteger(input.quantity) || input.quantity < 1) {
@@ -33,6 +36,9 @@ export function deliveryProblem(input: DeliveryInput): string | null {
   }
   if (typeof input.dateReceived !== "string" || !isRealDate(input.dateReceived)) {
     return "Date received must be a real date (YYYY-MM-DD).";
+  }
+  if (input.dateReceived > today) {
+    return "Date received cannot be in the future.";
   }
   if (
     input.costPerUnit !== undefined &&
@@ -65,10 +71,11 @@ export interface DeliveryPlan {
  * delivery so nothing is written.
  */
 export function planDelivery(
-  existing: { quantity?: unknown } | undefined,
+  today: string,
+  existing: { quantity?: unknown; lastCheckedDate?: unknown } | undefined,
   input: DeliveryInput
 ): DeliveryPlan {
-  const problem = deliveryProblem(input);
+  const problem = deliveryProblem(today, input);
   if (problem) throw new Error(problem);
 
   const tonerType = input.tonerType.trim();
@@ -84,12 +91,17 @@ export function planDelivery(
 
   if (existing) {
     const current = Number(existing.quantity);
+    // A delivery entered late must not move a more recent check date back.
+    const checked =
+      typeof existing.lastCheckedDate === "string" && isRealDate(existing.lastCheckedDate.slice(0, 10))
+        ? existing.lastCheckedDate.slice(0, 10)
+        : "";
     return {
       pool: {
         kind: "increment",
         fields: {
           quantity: (Number.isFinite(current) ? Math.max(0, current) : 0) + input.quantity,
-          lastCheckedDate: input.dateReceived,
+          lastCheckedDate: checked > input.dateReceived ? checked : input.dateReceived,
         },
       },
       delivery,

@@ -15,7 +15,8 @@ import { getAllTonerTypes, addTonerType } from "../services/tonerService";
 
 type Props = {
   onClose: () => void;
-  onSave: (pool: Omit<TonerStock, "id">) => void | Promise<void>;
+  /** Resolves false when the person backed out; the form then stays open. */
+  onSave: (pool: Omit<TonerStock, "id">) => void | boolean | Promise<void | boolean>;
   existing?: TonerStock;
 };
 
@@ -134,7 +135,7 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
 
     setSaving(true);
     try {
-      await onSave(pool);
+      if ((await onSave(pool)) === false) return;
 
       Swal.fire({
         icon: "success",

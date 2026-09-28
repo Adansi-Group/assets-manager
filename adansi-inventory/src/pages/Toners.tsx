@@ -12,7 +12,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import AddTonerModal from "../components/AddTonerModal";
 import type { TonerStock } from "../types/toner";
 import { lowToners } from "../toners/stockLevel";
-import { normalizeType, printersUsing } from "../toners/pools";
+import { findPool, normalizeType, printersUsing } from "../toners/pools";
+import { deliveryProblem } from "../toners/deliveries";
 import {
   findPoolCollisions,
   groupPools,
@@ -44,6 +45,65 @@ const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const today = () => new Date().toISOString().split("T")[0];
+
+type StockSource = { kind: "delivery"; dateReceived: string } | { kind: "correction" };
+
+/**
+ * Ask whether new stock is a delivery or a count correction. Neither is
+ * pre-selected: logging a recount as "received" would be as false as
+ * missing a real delivery. Resolves null when cancelled.
+ */
+async function askStockSource(
+  tonerType: string,
+  colorType: string,
+  quantity: number
+): Promise<StockSource | null> {
+  const result = await Swal.fire({
+    title: "Delivery or correction?",
+    html: `
+      <div class="text-left space-y-3">
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          ${quantity} &times; <strong>${escapeHtml(colorType)} ${escapeHtml(tonerType)}</strong>
+        </p>
+        <label class="flex items-start gap-2 p-3 border rounded cursor-pointer border-gray-300 dark:border-gray-600">
+          <input type="radio" name="stock-source" value="delivery" style="margin-top: 4px;" />
+          <span class="text-sm">
+            <strong>New delivery</strong> — arrived on
+            <input id="stock-source-date" type="date" value="${today()}" max="${today()}" class="swal2-input" style="margin: 6px 0 0; width: 100%;" />
+          </span>
+        </label>
+        <label class="flex items-start gap-2 p-3 border rounded cursor-pointer border-gray-300 dark:border-gray-600">
+          <input type="radio" name="stock-source" value="correction" style="margin-top: 4px;" />
+          <span class="text-sm">
+            <strong>Count correction (not a delivery)</strong><br />
+            <span class="text-gray-500">Cartridges already in the store, e.g. found in a recount.</span>
+          </span>
+        </label>
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: "Save",
+    confirmButtonColor: "#16a34a",
+    preConfirm: () => {
+      const chosen = document.querySelector<HTMLInputElement>('input[name="stock-source"]:checked');
+      if (!chosen) {
+        Swal.showValidationMessage("Choose New delivery or Count correction.");
+        return false;
+      }
+      if (chosen.value === "correction") return { kind: "correction" } as StockSource;
+
+      const dateReceived = (document.getElementById("stock-source-date") as HTMLInputElement).value;
+      const problem = deliveryProblem(today(), { tonerType, colorType, quantity, dateReceived });
+      if (problem) {
+        Swal.showValidationMessage(problem);
+        return false;
+      }
+      return { kind: "delivery", dateReceived } as StockSource;
+    },
+  });
+
+  return result.isConfirmed && result.value ? result.value : null;
+}
 
 export default function Toners() {
   const [pools, setPools] = useState<TonerStock[]>([]);
@@ -177,9 +237,33 @@ export default function Toners() {
   // The modal awaits this and shows any failure (including addTonerStock's
   // duplicate-pool error) itself, so this stays a plain write with no
   // try/catch of its own.
-  async function handleSave(pool: Omit<TonerStock, "id">) {
+  async function handleSave(pool: Omit<TonerStock, "id">): Promise<boolean> {
     if (editing) {
       await updateTonerStock({ ...pool, id: editing.id });
+    } else if (pool.quantity > 0) {
+      // Refuse a duplicate before asking anything: a delivery would otherwise
+      // quietly add to the existing pool from a form that says "add toner".
+      if (findPool(pools, pool.tonerType, pool.colorType)) {
+        throw new Error(
+          `${pool.colorType} ${pool.tonerType} already has a stock record. ` +
+            "Use Add stock for a delivery, or click its quantity to correct the count."
+        );
+      }
+      const source = await askStockSource(pool.tonerType, pool.colorType, pool.quantity);
+      if (!source) return false;
+      if (source.kind === "delivery") {
+        // Creates the pool and the dated delivery in one transaction. The
+        // cartridge need not be a saved toner type: the pool is keyed by name.
+        await recordTonerDelivery({
+          tonerType: pool.tonerType,
+          colorType: pool.colorType,
+          quantity: pool.quantity,
+          dateReceived: source.dateReceived,
+          ...(pool.costPerUnit !== undefined ? { costPerUnit: pool.costPerUnit } : {}),
+        });
+      } else {
+        await addTonerStock(pool);
+      }
     } else {
       await addTonerStock(pool);
     }
@@ -187,6 +271,7 @@ export default function Toners() {
     await loadStock();
     setEditing(null);
     navigate("/toners");
+    return true;
   }
 
   /**
@@ -250,7 +335,7 @@ export default function Toners() {
           </div>
           <div>
             <label for="delivery-date" ${label}>Date received</label>
-            <input id="delivery-date" type="date" value="${today()}" class="swal2-input" style="${field}" />
+            <input id="delivery-date" type="date" value="${today()}" max="${today()}" class="swal2-input" style="${field}" />
           </div>
           <div>
             <label for="delivery-cost" ${label}>Cost per unit (GH₵, optional)</label>
@@ -287,7 +372,10 @@ export default function Toners() {
           return refuse("Cost per unit must be 0 or more, or left blank.");
         }
 
-        return { tonerType, colorType, quantity, dateReceived, costPerUnit };
+        const delivery = { tonerType, colorType, quantity, dateReceived, costPerUnit };
+        const problem = deliveryProblem(today(), delivery);
+        if (problem) return refuse(problem);
+        return delivery;
       },
     });
 
@@ -328,7 +416,7 @@ export default function Toners() {
           <p class="text-sm text-gray-600 dark:text-gray-400">Cartridge: <strong>${row.tonerType}</strong></p>
           <p class="text-sm text-gray-600 dark:text-gray-400">Color: <strong class="${getColorTextClass(color)}">${color}</strong></p>
           <p class="text-sm text-gray-600 dark:text-gray-400">Current quantity: <strong>${currentQty}</strong></p>
-          ${!existingPool ? '<p class="text-xs text-orange-600 dark:text-orange-400">⚠️ This color hasn\'t been added yet. Enter quantity to create it.</p>' : ""}
+          ${!existingPool ? '<p class="text-xs text-orange-600 dark:text-orange-400">⚠️ This color hasn\'t been added yet. Enter quantity to create it; you will be asked if it is a delivery or a count correction.</p>' : ""}
           <input
             id="new-quantity"
             type="number"
@@ -365,6 +453,26 @@ export default function Toners() {
           quantity: result.value,
           lastCheckedDate: new Date().toISOString().split("T")[0],
         });
+      } else if (result.value > 0) {
+        const source = await askStockSource(row.tonerType, color, result.value);
+        if (!source) return;
+        if (source.kind === "delivery") {
+          await recordTonerDelivery({
+            tonerType: row.tonerType,
+            colorType: color,
+            quantity: result.value,
+            dateReceived: source.dateReceived,
+          });
+        } else {
+          await addTonerStock({
+            tonerType: row.tonerType,
+            colorType: color,
+            quantity: result.value,
+            initialQuantity: result.value,
+            dateBrought: new Date().toISOString().split("T")[0],
+            lastCheckedDate: new Date().toISOString().split("T")[0],
+          });
+        }
       } else {
         await addTonerStock({
           tonerType: row.tonerType,

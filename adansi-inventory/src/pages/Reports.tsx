@@ -20,7 +20,7 @@ import { renderReportPdf } from "../reports/shared/pdf/renderPdf";
 import { DEFAULT_TONER_REORDER_LEVEL } from "../toners/stockLevel";
 import { buildStationReport } from "../reports/station/model";
 import { narrateStation } from "../reports/station/narrate";
-import { getToners } from "../services/tonerService";
+import { getTonersStrict } from "../services/tonerService";
 import { getTonerStock } from "../services/tonerStockService";
 import { getTonerDeliveries } from "../services/tonerDeliveryService";
 import { getPrintersStrict } from "../services/printerService";
@@ -93,7 +93,7 @@ export default function Reports() {
     setError(null);
     try {
       const [t, st, d, p, r, s, i, g, level] = await Promise.all([
-        getToners(),
+        getTonersStrict(),
         getTonerStock(),
         // Throws on failure, so the page shows an error rather than "none received".
         getTonerDeliveries(),

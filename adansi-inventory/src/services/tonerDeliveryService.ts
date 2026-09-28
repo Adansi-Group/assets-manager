@@ -34,8 +34,12 @@ export async function getTonerDeliveries(): Promise<TonerDelivery[]> {
  * transaction — so the stock never moves without the record, nor the reverse.
  */
 export async function recordTonerDelivery(input: DeliveryInput): Promise<void> {
+  // Same "today" as the page's date default: the ISO (UTC) date, which is
+  // local time in Ghana.
+  const today = new Date().toISOString().split("T")[0];
+
   // Refuse before touching Firestore; planDelivery re-checks inside.
-  const problem = deliveryProblem(input);
+  const problem = deliveryProblem(today, input);
   if (problem) throw new Error(problem);
 
   // Firestore transactions cannot query, so the pool is located first with
@@ -53,7 +57,7 @@ export async function recordTonerDelivery(input: DeliveryInput): Promise<void> {
   const deliveryRef = doc(collection(db, TONER_DELIVERIES_COLLECTION));
 
   await runTransaction(db, async (transaction) => {
-    let current: { quantity?: unknown } | undefined;
+    let current: { quantity?: unknown; lastCheckedDate?: unknown } | undefined;
     if (existing) {
       const poolSnapshot = await transaction.get(poolRef);
       if (!poolSnapshot.exists()) {
@@ -65,7 +69,7 @@ export async function recordTonerDelivery(input: DeliveryInput): Promise<void> {
       current = poolSnapshot.data();
     }
 
-    const plan = planDelivery(current, input);
+    const plan = planDelivery(today, current, input);
     if (plan.pool.kind === "increment") {
       transaction.update(poolRef, plan.pool.fields);
     } else {
