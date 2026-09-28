@@ -76,8 +76,7 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
   }, []);
 
   // The saved cartridge stays a visible, selected option even when it is not
-  // in the catalogue — same idea as `selectablePrinterModels` in
-  // src/toners/stockMatching.ts, so a value never gets silently dropped.
+  // in the catalogue, so a value never gets silently dropped.
   const currentTonerType = tonerType.trim();
   const tonerTypeOptions =
     currentTonerType && !tonerTypes.includes(currentTonerType)
