@@ -58,7 +58,7 @@ export default function App() {
       setChecking(true);
       const lookup = await lookupMember(fbUser.email ?? "");
       if (mySeq !== seq) return;
-      const decision = decideAccess(fbUser.email, lookup);
+      const decision = decideAccess(fbUser.email, lookup, fbUser.emailVerified);
       if (!decision.allowed) {
         setNotice(refusalMessage(decision.reason));
         setCurrentUser(null);

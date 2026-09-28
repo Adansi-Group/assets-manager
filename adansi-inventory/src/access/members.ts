@@ -3,6 +3,10 @@
 //
 // The access list is the `members` collection, keyed by email. Anyone not on
 // it is refused — there is no default role, and a failed lookup refuses too.
+//
+// Being listed is not enough: anyone can register a password account for an
+// email they do not own. So the sign-in must be one the provider verified
+// (Google always does), unless the member entry says a password is expected.
 
 import type { Member } from "../types/member";
 import type { UserRole } from "../types/users";
@@ -22,7 +26,7 @@ export type MemberLookup =
   | { status: "missing" }
   | { status: "failed" };
 
-export type RefusalReason = "no-email" | "not-member" | "lookup-failed";
+export type RefusalReason = "no-email" | "not-member" | "unverified" | "lookup-failed";
 
 export type AccessDecision =
   | { allowed: true; member: Member }
@@ -30,13 +34,17 @@ export type AccessDecision =
 
 export function decideAccess(
   tokenEmail: string | null | undefined,
-  lookup: MemberLookup
+  lookup: MemberLookup,
+  emailVerified: boolean
 ): AccessDecision {
   const email = normalizeEmail(tokenEmail);
   if (!email) return { allowed: false, reason: "no-email" };
   if (lookup.status === "failed") return { allowed: false, reason: "lookup-failed" };
   if (lookup.status === "missing") return { allowed: false, reason: "not-member" };
   if (normalizeEmail(lookup.member.email) !== email) return { allowed: false, reason: "not-member" };
+  if (!emailVerified && lookup.member.passwordSignIn !== true) {
+    return { allowed: false, reason: "unverified" };
+  }
   return { allowed: true, member: lookup.member };
 }
 

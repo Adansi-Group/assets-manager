@@ -29,23 +29,23 @@ describe("normalizeEmail", () => {
 describe("decideAccess", () => {
   it("lets a member in", () => {
     const m = member("eobeng@adansitravels.com");
-    expect(decideAccess("eobeng@adansitravels.com", { status: "found", member: m })).toEqual({
+    expect(decideAccess("eobeng@adansitravels.com", { status: "found", member: m }, true)).toEqual({
       allowed: true,
       member: m,
     });
   });
   it("refuses a signed-in person with no email", () => {
-    expect(decideAccess("", { status: "missing" })).toEqual({ allowed: false, reason: "no-email" });
-    expect(decideAccess(null, { status: "missing" })).toEqual({ allowed: false, reason: "no-email" });
+    expect(decideAccess("", { status: "missing" }, true)).toEqual({ allowed: false, reason: "no-email" });
+    expect(decideAccess(null, { status: "missing" }, true)).toEqual({ allowed: false, reason: "no-email" });
   });
   it("refuses a non-member", () => {
-    expect(decideAccess("stranger@gmail.com", { status: "missing" })).toEqual({
+    expect(decideAccess("stranger@gmail.com", { status: "missing" }, true)).toEqual({
       allowed: false,
       reason: "not-member",
     });
   });
   it("refuses when the lookup failed, never defaulting to a role", () => {
-    expect(decideAccess("eobeng@adansitravels.com", { status: "failed" })).toEqual({
+    expect(decideAccess("eobeng@adansitravels.com", { status: "failed" }, true)).toEqual({
       allowed: false,
       reason: "lookup-failed",
     });
@@ -53,12 +53,41 @@ describe("decideAccess", () => {
   it("refuses a found document whose email does not match the token", () => {
     // Defence in depth: the caller looked up the wrong id.
     expect(
-      decideAccess("eobeng@adansitravels.com", { status: "found", member: member("hr@adansitravels.com") })
+      decideAccess(
+        "eobeng@adansitravels.com",
+        { status: "found", member: member("hr@adansitravels.com") },
+        true
+      )
     ).toEqual({ allowed: false, reason: "not-member" });
   });
   it("matches regardless of case in the token", () => {
     const m = member("mannan@adansitravels.com");
-    expect(decideAccess("Mannan@AdansiTravels.com", { status: "found", member: m }).allowed).toBe(true);
+    expect(decideAccess("Mannan@AdansiTravels.com", { status: "found", member: m }, true).allowed).toBe(
+      true
+    );
+  });
+  it("refuses a listed email whose sign-in nobody verified", () => {
+    // Anyone can register a password account for an email they do not own.
+    const m = member("mannan@adansitravels.com");
+    expect(decideAccess("mannan@adansitravels.com", { status: "found", member: m }, false)).toEqual({
+      allowed: false,
+      reason: "unverified",
+    });
+  });
+  it("lets an unverified password sign-in in when the member entry allows it", () => {
+    const hr: Member = { ...member("hr@adansitravels.com", "HR Manager"), passwordSignIn: true };
+    expect(decideAccess("hr@adansitravels.com", { status: "found", member: hr }, false)).toEqual({
+      allowed: true,
+      member: hr,
+    });
+  });
+  it("takes only a real true as the password exception", () => {
+    // The first entries are typed by hand in the console; "true" as text is not a yes.
+    const hr = { ...member("hr@adansitravels.com", "HR Manager"), passwordSignIn: "true" } as unknown as Member;
+    expect(decideAccess("hr@adansitravels.com", { status: "found", member: hr }, false)).toEqual({
+      allowed: false,
+      reason: "unverified",
+    });
   });
 });
 
@@ -70,6 +99,7 @@ describe("refusalMessage", () => {
     expect(ACCESS_COPY.lookupFailed).toBe("Couldn't check your access. Please try again.");
     expect(refusalMessage("not-member")).toBe(ACCESS_COPY.notMember);
     expect(refusalMessage("no-email")).toBe(ACCESS_COPY.notMember);
+    expect(refusalMessage("unverified")).toBe(ACCESS_COPY.notMember);
     expect(refusalMessage("lookup-failed")).toBe(ACCESS_COPY.lookupFailed);
   });
 });

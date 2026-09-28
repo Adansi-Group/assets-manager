@@ -10,4 +10,10 @@ export interface Member {
   createdAt: string;
   /** Email of the admin who added them. */
   addedBy?: string;
+  /**
+   * Lets this person in with a password account whose email nobody verified.
+   * Only safe while that account exists: it is what stops anyone else
+   * registering the address. Set by hand in the console, never by the app.
+   */
+  passwordSignIn?: boolean;
 }
