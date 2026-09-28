@@ -85,7 +85,7 @@ export async function addInventoryItem(item: Omit<InventoryItem, "id">): Promise
     console.log("✅ Inventory item added successfully");
   } catch (error) {
     console.error("❌ Error adding inventory item:", error);
-    throw new Error(`Failed to add inventory item: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to add inventory item: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
 
@@ -117,7 +117,7 @@ export async function updateInventoryItem(item: InventoryItem): Promise<void> {
     console.log("✅ Inventory item updated successfully");
   } catch (error) {
     console.error("❌ Error updating inventory item:", error);
-    throw new Error(`Failed to update inventory item: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to update inventory item: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
 

@@ -185,7 +185,7 @@ export async function addGadget(gadget: Omit<Gadget, "id">): Promise<void> {
     console.log("✅ Gadget added successfully");
   } catch (error) {
     console.error("❌ Error adding gadget:", error);
-    throw new Error(`Failed to add gadget: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to add gadget: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
 
@@ -216,7 +216,7 @@ export async function updateGadget(gadget: Gadget): Promise<void> {
     console.log("✅ Gadget updated successfully");
   } catch (error) {
     console.error("❌ Error updating gadget:", error);
-    throw new Error(`Failed to update gadget: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to update gadget: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
 

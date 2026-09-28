@@ -13,6 +13,7 @@ import AddGadgetModal from "../components/AddGadgetModal";
 import Pagination from "../components/Pagination";
 import { Plus, Search, Trash2, Eye, MonitorSmartphone, Edit } from "lucide-react";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../toners/accessErrors";
 import ExportDropdown from "../components/ExportDropdown";
 import {
   buildInUseAssignmentExport,
@@ -101,7 +102,7 @@ export default function Gadgets() {
       Swal.fire({
         icon: "error",
         title: "Failed",
-        text: "Could not save gadget"
+        text: roleDeniedMessage(error, "gadgets") ?? "Could not save gadget"
       });
     }
   }
@@ -130,7 +131,7 @@ export default function Gadgets() {
         Swal.fire({
           icon: "error",
           title: "Failed",
-          text: "Could not delete gadget"
+          text: roleDeniedMessage(error, "gadgets") ?? "Could not delete gadget"
         });
       }
     }

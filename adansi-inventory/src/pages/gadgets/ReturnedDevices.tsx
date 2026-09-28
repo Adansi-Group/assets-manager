@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Archive, Edit, Search, Trash2 } from "lucide-react";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../../toners/accessErrors";
 import AddReturnedDeviceModal from "../../components/AddReturnedDeviceModal";
 import ExportDropdown from "../../components/ExportDropdown";
 import Pagination from "../../components/Pagination";
@@ -38,17 +39,21 @@ export default function ReturnedDevices() {
       setEditing(null);
       navigate("/gadgets/returned");
       void Swal.fire({ icon: "success", title: "id" in gadget ? "Device Updated" : "Device Recorded", timer: 1500, showConfirmButton: false });
-    } catch {
-      void Swal.fire({ icon: "error", title: "Could not save device", text: "Please check the details and try again." });
+    } catch (error) {
+      void Swal.fire({ icon: "error", title: "Could not save device", text: roleDeniedMessage(error, "gadgets") ?? "Please check the details and try again." });
     }
   }
 
   async function handleRemove(id: string) {
     const result = await Swal.fire({ title: "Delete this locker record?", text: "This permanently removes the device record.", icon: "warning", showCancelButton: true, confirmButtonColor: "#dc2626", confirmButtonText: "Delete record" });
     if (!result.isConfirmed) return;
-    await deleteGadget(id);
-    await loadDevices();
-    void Swal.fire({ icon: "success", title: "Record deleted", timer: 1200, showConfirmButton: false });
+    try {
+      await deleteGadget(id);
+      await loadDevices();
+      void Swal.fire({ icon: "success", title: "Record deleted", timer: 1200, showConfirmButton: false });
+    } catch (error) {
+      void Swal.fire({ icon: "error", title: "Could not delete record", text: roleDeniedMessage(error, "gadgets") ?? "Please try again." });
+    }
   }
 
   const normalizedSearch = search.toLowerCase();

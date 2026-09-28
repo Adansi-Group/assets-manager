@@ -24,6 +24,7 @@ import {
   deleteGadget,
 } from "../../services/gadgetsService";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../../toners/accessErrors";
 import { Package, Search, Edit, Trash2, Eye } from "lucide-react";
 
 export default function Accessories() {
@@ -84,7 +85,7 @@ export default function Accessories() {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: "Failed to save accessory",
+        text: roleDeniedMessage(error, "gadgets") ?? "Failed to save accessory",
       });
     }
   }
@@ -101,16 +102,24 @@ export default function Accessories() {
     });
 
     if (result.isConfirmed) {
-      await deleteGadget(id);
-      await loadAccessories();
+      try {
+        await deleteGadget(id);
+        await loadAccessories();
 
-      Swal.fire({
-        title: "Deleted!",
-        text: "Accessory has been deleted.",
-        icon: "success",
-        timer: 1500,
-        showConfirmButton: false,
-      });
+        Swal.fire({
+          title: "Deleted!",
+          text: "Accessory has been deleted.",
+          icon: "success",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      } catch (error) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: roleDeniedMessage(error, "gadgets") ?? "Failed to delete accessory",
+        });
+      }
     }
   }
 

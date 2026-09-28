@@ -82,7 +82,7 @@ export async function addSupportTicket(ticket: Omit<SupportTicket, "id" | "ticke
     console.log("✅ Support ticket added successfully");
   } catch (error) {
     console.error("❌ Error adding support ticket:", error);
-    throw new Error(`Failed to add support ticket: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to add support ticket: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
 
@@ -109,7 +109,7 @@ export async function updateSupportTicket(ticket: SupportTicket): Promise<void> 
     console.log("✅ Support ticket updated successfully");
   } catch (error) {
     console.error("❌ Error updating support ticket:", error);
-    throw new Error(`Failed to update support ticket: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to update support ticket: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
 

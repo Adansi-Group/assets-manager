@@ -5,6 +5,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../toners/accessErrors";
 import AddA4SheetModal from "../components/Adda4sheetmodal";
 import type { A4Sheet } from "../types/A4Sheet";
 import {
@@ -93,7 +94,7 @@ export default function A4Sheets() {
     } catch (error) {
       Swal.fire({
         title: "Error",
-        text: "Failed to save stock record",
+        text: roleDeniedMessage(error, "A4 sheet stock") ?? "Failed to save stock record",
         icon: "error",
       });
     }
@@ -138,16 +139,24 @@ export default function A4Sheets() {
         currentQuantity: result.value,
       };
 
-      await updateA4Sheet(updatedSheet);
-      await loadSheets();
+      try {
+        await updateA4Sheet(updatedSheet);
+        await loadSheets();
 
-      Swal.fire({
-        icon: "success",
-        title: "Quantity Updated",
-        text: `Stock quantity updated to ${result.value} reams`,
-        timer: 1500,
-        showConfirmButton: false,
-      });
+        Swal.fire({
+          icon: "success",
+          title: "Quantity Updated",
+          text: `Stock quantity updated to ${result.value} reams`,
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      } catch (error) {
+        Swal.fire({
+          title: "Error",
+          text: roleDeniedMessage(error, "A4 sheet stock") ?? "Failed to update quantity",
+          icon: "error",
+        });
+      }
     }
   }
 
@@ -162,16 +171,24 @@ export default function A4Sheets() {
       confirmButtonText: "Yes, delete",
     }).then(async (res) => {
       if (res.isConfirmed) {
-        await deleteA4Sheet(id);
-        await loadSheets();
+        try {
+          await deleteA4Sheet(id);
+          await loadSheets();
 
-        Swal.fire({
-          title: "Deleted!",
-          text: "Record has been deleted.",
-          icon: "success",
-          timer: 1500,
-          showConfirmButton: false,
-        });
+          Swal.fire({
+            title: "Deleted!",
+            text: "Record has been deleted.",
+            icon: "success",
+            timer: 1500,
+            showConfirmButton: false,
+          });
+        } catch (error) {
+          Swal.fire({
+            title: "Error",
+            text: roleDeniedMessage(error, "A4 sheet stock") ?? "Failed to delete record",
+            icon: "error",
+          });
+        }
       }
     });
   }

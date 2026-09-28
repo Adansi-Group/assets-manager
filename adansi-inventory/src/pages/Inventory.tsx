@@ -21,6 +21,7 @@ import {
   Eye
 } from "lucide-react";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../toners/accessErrors";
 import {
   getInventoryItems,
   addInventoryItem,
@@ -211,7 +212,7 @@ export default function Inventory() {
       loadItems();
     } catch (error) {
       console.error("Error adding item:", error);
-      Swal.fire("Error", "Failed to add item", "error");
+      Swal.fire("Error", roleDeniedMessage(error, "inventory") ?? "Failed to add item", "error");
     }
   };
 
@@ -236,7 +237,7 @@ export default function Inventory() {
       loadItems();
     } catch (error) {
       console.error("Error updating item:", error);
-      Swal.fire("Error", "Failed to update item", "error");
+      Swal.fire("Error", roleDeniedMessage(error, "inventory") ?? "Failed to update item", "error");
     }
   };
 
@@ -257,7 +258,7 @@ export default function Inventory() {
         loadItems();
       } catch (error) {
         console.error("Error deleting item:", error);
-        Swal.fire("Error", "Failed to delete item", "error");
+        Swal.fire("Error", roleDeniedMessage(error, "inventory") ?? "Failed to delete item", "error");
       }
     }
   };
@@ -299,7 +300,7 @@ export default function Inventory() {
       loadItems();
     } catch (error) {
       console.error("Error updating stock:", error);
-      Swal.fire("Error", "Failed to update stock", "error");
+      Swal.fire("Error", roleDeniedMessage(error, "inventory") ?? "Failed to update stock", "error");
     }
   };
 

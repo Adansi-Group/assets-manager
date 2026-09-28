@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../toners/accessErrors";
 import AddPrinterModal from "../components/AddPrinterModal";
 import ReplaceTonerModal from "../components/Replacetonermodal";
 import QuickCheckTonerModal from "../components/QuickCheckTonerModal";
@@ -47,11 +48,20 @@ export default function Printers() {
 
   async function handleSave(printer: Printer | Omit<Printer, "id">) {
     const isEditing = "id" in printer;
-    
-    if (isEditing) {
-      await updatePrinter(printer);
-    } else {
-      await addPrinter(printer);
+
+    try {
+      if (isEditing) {
+        await updatePrinter(printer);
+      } else {
+        await addPrinter(printer);
+      }
+    } catch (error) {
+      Swal.fire({
+        title: "Error",
+        text: roleDeniedMessage(error, "printers") ?? "Failed to save printer. Please try again.",
+        icon: "error",
+      });
+      return;
     }
 
     await loadPrinters();
@@ -93,7 +103,7 @@ export default function Printers() {
     } catch (error) {
       Swal.fire({
         title: "Error",
-        text: "Failed to update toner levels. Please try again.",
+        text: roleDeniedMessage(error, "printers") ?? "Failed to update toner levels. Please try again.",
         icon: "error",
       });
     }
@@ -132,7 +142,8 @@ export default function Printers() {
         title: "Error",
         text: error instanceof TonerStockError
           ? error.message
-          : "Failed to record replacement. No stock changes were saved; please try again.",
+          : roleDeniedMessage(error, "printers and toner stock") ??
+            "Failed to record replacement. No stock changes were saved; please try again.",
         icon: "error",
       });
     }
@@ -148,16 +159,24 @@ export default function Printers() {
       confirmButtonText: "Yes, delete",
     }).then(async (res) => {
       if (res.isConfirmed) {
-        await deletePrinter(id);
-        await loadPrinters();
-        
-        Swal.fire({
-          title: "Deleted!",
-          text: "Printer has been deleted and unused options cleaned up.",
-          icon: "success",
-          timer: 1500,
-          showConfirmButton: false,
-        });
+        try {
+          await deletePrinter(id);
+          await loadPrinters();
+
+          Swal.fire({
+            title: "Deleted!",
+            text: "Printer has been deleted and unused options cleaned up.",
+            icon: "success",
+            timer: 1500,
+            showConfirmButton: false,
+          });
+        } catch (error) {
+          Swal.fire({
+            title: "Error",
+            text: roleDeniedMessage(error, "printers") ?? "Failed to delete printer. Please try again.",
+            icon: "error",
+          });
+        }
       }
     });
   }

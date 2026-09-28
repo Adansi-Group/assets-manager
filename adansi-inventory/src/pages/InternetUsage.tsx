@@ -7,6 +7,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../toners/accessErrors";
 import AddInternetUsageModal from "../components/AddInternetModal";
 import type { InternetUsage } from "../types/InternetUsage";
 import {
@@ -98,7 +99,7 @@ export default function InternetUsage() {
     } catch (error) {
       Swal.fire({
         title: "Error",
-        text: "Failed to save record",
+        text: roleDeniedMessage(error, "internet usage records") ?? "Failed to save record",
         icon: "error",
       });
     }
@@ -115,16 +116,24 @@ export default function InternetUsage() {
       confirmButtonText: "Yes, delete",
     }).then(async (res) => {
       if (res.isConfirmed) {
-        await deleteInternetUsage(id);
-        await loadRecords();
+        try {
+          await deleteInternetUsage(id);
+          await loadRecords();
 
-        Swal.fire({
-          title: "Deleted!",
-          text: "Record has been deleted.",
-          icon: "success",
-          timer: 1500,
-          showConfirmButton: false,
-        });
+          Swal.fire({
+            title: "Deleted!",
+            text: "Record has been deleted.",
+            icon: "success",
+            timer: 1500,
+            showConfirmButton: false,
+          });
+        } catch (error) {
+          Swal.fire({
+            title: "Error",
+            text: roleDeniedMessage(error, "internet usage records") ?? "Failed to delete record",
+            icon: "error",
+          });
+        }
       }
     });
   }

@@ -3,6 +3,7 @@ import { getAllReplacements, deleteReplacement, updateReplacement } from "../ser
 import type { TonerReplacement } from "../types/toner";
 import { Download, History, Trash2, Edit, Eye } from "lucide-react";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../toners/accessErrors";
 
 export default function ReplacementHistory() {
   const [replacements, setReplacements] = useState<TonerReplacement[]>([]);
@@ -59,7 +60,7 @@ export default function ReplacementHistory() {
         Swal.fire({
           icon: "error",
           title: "Error",
-          text: "Failed to delete replacement record",
+          text: roleDeniedMessage(error, "toner replacements") ?? "Failed to delete replacement record",
         });
       }
     }
@@ -207,7 +208,7 @@ export default function ReplacementHistory() {
         Swal.fire({
           icon: 'error',
           title: 'Error',
-          text: 'Failed to update record',
+          text: roleDeniedMessage(error, "toner replacements") ?? 'Failed to update record',
         });
       }
     }

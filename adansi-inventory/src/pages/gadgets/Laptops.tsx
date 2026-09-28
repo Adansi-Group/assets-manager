@@ -22,6 +22,7 @@ import {
   deleteGadget,
 } from "../../services/gadgetsService";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../../toners/accessErrors";
 import { Laptop as LaptopIcon, Search, Edit, Trash2, Eye } from "lucide-react";
 
 export default function Laptops() {
@@ -82,7 +83,7 @@ export default function Laptops() {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: "Failed to save laptop",
+        text: roleDeniedMessage(error, "gadgets") ?? "Failed to save laptop",
       });
     }
   }
@@ -99,16 +100,24 @@ export default function Laptops() {
     });
 
     if (result.isConfirmed) {
-      await deleteGadget(id);
-      await loadLaptops();
+      try {
+        await deleteGadget(id);
+        await loadLaptops();
 
-      Swal.fire({
-        title: "Deleted!",
-        text: "Laptop has been deleted.",
-        icon: "success",
-        timer: 1500,
-        showConfirmButton: false,
-      });
+        Swal.fire({
+          title: "Deleted!",
+          text: "Laptop has been deleted.",
+          icon: "success",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      } catch (error) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: roleDeniedMessage(error, "gadgets") ?? "Failed to delete laptop",
+        });
+      }
     }
   }
 

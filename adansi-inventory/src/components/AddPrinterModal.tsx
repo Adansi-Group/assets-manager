@@ -6,6 +6,8 @@
 
 import { useState, useEffect } from "react";
 import { X, Plus } from "lucide-react";
+import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../toners/accessErrors";
 import type { Printer, PrinterColor } from "../types/printer";
 import {
   getAllLocations,
@@ -91,10 +93,23 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
       ? [currentTonerType, ...tonerTypes]
       : tonerTypes;
 
+  function showOptionError(error: unknown) {
+    Swal.fire({
+      icon: "error",
+      title: "Error",
+      text: roleDeniedMessage(error, "printer options") ?? "Could not save the new option. Please try again.",
+    });
+  }
+
   async function handleAddCustomLocation() {
     if (customLocation.trim()) {
       const trimmedLocation = customLocation.trim();
-      await addCustomLocation(trimmedLocation);
+      try {
+        await addCustomLocation(trimmedLocation);
+      } catch (error) {
+        showOptionError(error);
+        return;
+      }
       setLocation(trimmedLocation);
       setAvailableLocations(await getAllLocations());
       setCustomLocation("");
@@ -105,7 +120,12 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
   async function handleAddCustomModel() {
     if (customModel.trim()) {
       const trimmedModel = customModel.trim();
-      await addCustomModel(trimmedModel);
+      try {
+        await addCustomModel(trimmedModel);
+      } catch (error) {
+        showOptionError(error);
+        return;
+      }
       setModel(trimmedModel);
       setAvailableModels(await getAllModels());
       setCustomModel("");
@@ -116,7 +136,12 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
   async function handleAddCustomAccessory() {
     if (customAccessory.trim() && !accessories.includes(customAccessory.trim())) {
       const trimmedAccessory = customAccessory.trim();
-      await addCustomAccessory(trimmedAccessory);
+      try {
+        await addCustomAccessory(trimmedAccessory);
+      } catch (error) {
+        showOptionError(error);
+        return;
+      }
       setAccessories([...accessories, trimmedAccessory]);
       setAvailableAccessories(await getAllAccessories());
       setCustomAccessory("");
@@ -127,7 +152,12 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
   async function handleAddCustomColor() {
     if (customColor.trim()) {
       const kebabColor = customColor.trim().toLowerCase().replace(/\s+/g, '-');
-      await addCustomColor(customColor.trim());
+      try {
+        await addCustomColor(customColor.trim());
+      } catch (error) {
+        showOptionError(error);
+        return;
+      }
       setPrinterColorType(kebabColor as PrinterColor);
       setAvailableColors(await getAllColors());
       setCustomColor("");

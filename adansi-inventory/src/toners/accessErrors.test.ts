@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accessErrorMessage } from "./accessErrors";
+import { accessErrorMessage, roleDeniedMessage } from "./accessErrors";
 
 /** Shaped like a FirestoreError without importing Firestore. */
 const firestoreError = (code: string, message = "Missing or insufficient permissions.") =>
@@ -60,5 +60,35 @@ describe("accessErrorMessage", () => {
     expect(accessErrorMessage(null, "toner_stock", "Could not load toner stock.")).toBe(
       "Could not load toner stock."
     );
+  });
+});
+
+describe("roleDeniedMessage", () => {
+  it("says the role may not do this when Firestore refuses", () => {
+    expect(roleDeniedMessage(firestoreError("permission-denied"), "gadgets")).toBe(
+      "You don't have permission to change or read gadgets. " +
+        "If you think you should, ask an administrator to check your role."
+    );
+  });
+
+  it("sees a refusal that a service wrapped in its own message", () => {
+    const wrapped = new Error("Failed to add gadget: Missing or insufficient permissions.", {
+      cause: firestoreError("permission-denied"),
+    });
+    expect(roleDeniedMessage(wrapped, "gadgets")).toMatch(/permission to change or read gadgets/);
+    expect(accessErrorMessage(wrapped, "gadgets")).toMatch(/permission to change or read gadgets/);
+  });
+
+  it("leaves every other failure to the page's own message", () => {
+    expect(roleDeniedMessage(firestoreError("unavailable", "Offline."), "gadgets")).toBeNull();
+    expect(roleDeniedMessage(new Error("boom", { cause: new Error("inner") }), "gadgets")).toBeNull();
+    expect(roleDeniedMessage("boom", "gadgets")).toBeNull();
+    expect(roleDeniedMessage(null, "gadgets")).toBeNull();
+  });
+
+  it("does not loop on an error that is its own cause", () => {
+    const loop = new Error("loop") as Error & { cause?: unknown };
+    loop.cause = loop;
+    expect(roleDeniedMessage(loop, "gadgets")).toBeNull();
   });
 });

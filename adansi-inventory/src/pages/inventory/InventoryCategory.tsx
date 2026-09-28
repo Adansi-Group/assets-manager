@@ -22,6 +22,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../../toners/accessErrors";
 import { auth } from "../../firebase/firebase";
 
 // Map URL param to category
@@ -108,7 +109,7 @@ export default function InventoryCategory() {
       Swal.fire({
         icon: "error",
         title: "Failed",
-        text: "Could not add item"
+        text: roleDeniedMessage(error, "inventory") ?? "Could not add item"
       });
     }
   }
@@ -137,7 +138,7 @@ export default function InventoryCategory() {
         Swal.fire({
           icon: "error",
           title: "Failed",
-          text: "Could not delete item"
+          text: roleDeniedMessage(error, "inventory") ?? "Could not delete item"
         });
       }
     }
@@ -195,7 +196,7 @@ export default function InventoryCategory() {
         Swal.fire({
           icon: "error",
           title: "Failed",
-          text: "Could not add stock"
+          text: roleDeniedMessage(error, "inventory") ?? "Could not add stock"
         });
       }
     }
@@ -257,7 +258,7 @@ export default function InventoryCategory() {
         Swal.fire({
           icon: "error",
           title: "Failed",
-          text: "Could not remove stock"
+          text: roleDeniedMessage(error, "inventory") ?? "Could not remove stock"
         });
       }
     }

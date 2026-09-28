@@ -9,6 +9,7 @@ import {
   deleteSupportTicket,
 } from "../services/supportTicketService";
 import Swal from "sweetalert2";
+import { roleDeniedMessage } from "../toners/accessErrors";
 import { Download, Search, AlertCircle, CheckCircle, Clock, XCircle } from "lucide-react";
 
 export default function SupportTickets() {
@@ -58,7 +59,9 @@ export default function SupportTickets() {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: error instanceof Error ? error.message : "Failed to create ticket",
+        text:
+          roleDeniedMessage(error, "support tickets") ??
+          (error instanceof Error ? error.message : "Failed to create ticket"),
       });
     }
   }
@@ -106,15 +109,23 @@ export default function SupportTickets() {
         dateResolved,
       };
 
-      await updateSupportTicket(updatedTicket);
-      await loadTickets();
+      try {
+        await updateSupportTicket(updatedTicket);
+        await loadTickets();
 
-      Swal.fire({
-        icon: "success",
-        title: "Status Updated",
-        timer: 1500,
-        showConfirmButton: false,
-      });
+        Swal.fire({
+          icon: "success",
+          title: "Status Updated",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      } catch (error) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: roleDeniedMessage(error, "support tickets") ?? "Failed to update ticket status",
+        });
+      }
     }
   }
 
@@ -134,15 +145,23 @@ export default function SupportTickets() {
     });
 
     if (result.isConfirmed) {
-      await deleteSupportTicket(id);
-      await loadTickets();
+      try {
+        await deleteSupportTicket(id);
+        await loadTickets();
 
-      Swal.fire({
-        title: "Deleted!",
-        icon: "success",
-        timer: 1500,
-        showConfirmButton: false,
-      });
+        Swal.fire({
+          title: "Deleted!",
+          icon: "success",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      } catch (error) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: roleDeniedMessage(error, "support tickets") ?? "Failed to delete ticket",
+        });
+      }
     }
   }
 
