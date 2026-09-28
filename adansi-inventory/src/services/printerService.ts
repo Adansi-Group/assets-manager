@@ -18,7 +18,8 @@ import { db } from "../firebase/firebase";
 import type { Printer } from "../types/printer";
 import { cleanupUnusedOptions } from "./printerOptionsService";
 
-const COLLECTION = "printers";
+export const PRINTERS_COLLECTION = "printers";
+const COLLECTION = PRINTERS_COLLECTION;
 
 // GET ALL PRINTERS
 export async function getPrinters(): Promise<Printer[]> {

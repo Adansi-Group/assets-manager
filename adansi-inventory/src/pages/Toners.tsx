@@ -12,7 +12,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import AddTonerModal from "../components/AddTonerModal";
 import type { TonerStock } from "../types/toner";
 import { lowToners } from "../toners/stockLevel";
-import { findPool, normalizeType, printersUsing } from "../toners/pools";
+import { findPool, isInService, normalizeType, printersUsing } from "../toners/pools";
 import { deliveryProblem } from "../toners/deliveries";
 import { canonicalColour, TONER_COLOURS, withCanonicalColour } from "../toners/colours";
 import {
@@ -22,7 +22,7 @@ import {
   usedByLabel,
   type CartridgeRow,
 } from "../toners/poolRows";
-import { getPrinters } from "../services/printerService";
+import { getPrintersStrict, PRINTERS_COLLECTION } from "../services/printerService";
 import type { Printer } from "../types/printer";
 import { getTonerReorderLevel } from "../services/notificationService";
 import {
@@ -30,8 +30,13 @@ import {
   addTonerStock,
   updateTonerStock,
   deleteTonerStock,
+  TONER_STOCK_COLLECTION,
 } from "../services/tonerStockService";
-import { recordTonerDelivery } from "../services/tonerDeliveryService";
+import {
+  recordTonerDelivery,
+  TONER_DELIVERIES_COLLECTION,
+} from "../services/tonerDeliveryService";
+import { accessErrorMessage } from "../toners/accessErrors";
 import { getAllTonerTypes } from "../services/tonerService";
 import Swal from "sweetalert2";
 import { AlertTriangle, Download, ChevronDown, Unlink } from "lucide-react";
@@ -123,7 +128,9 @@ export default function Toners() {
       const [data, level, printerList] = await Promise.all([
         getTonerStock(),
         getTonerReorderLevel(),
-        getPrinters(),
+        // Strict: a failed printers read must not show every pool as
+        // "used by 0 printers".
+        getPrintersStrict(),
       ]);
       setPools(data);
       setReorderLevel(level);
@@ -131,7 +138,13 @@ export default function Toners() {
     } catch (error) {
       // An empty table reads as "we have nothing", which would be a lie —
       // say plainly that the stock could not be read instead.
-      setLoadError(error instanceof Error ? error.message : "Failed to load toner stock");
+      setLoadError(
+        accessErrorMessage(
+          error,
+          [TONER_STOCK_COLLECTION, PRINTERS_COLLECTION],
+          "Failed to load toner stock"
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -404,7 +417,11 @@ export default function Toners() {
       Swal.fire({
         icon: "error",
         title: "Could not record the delivery",
-        text: error instanceof Error ? error.message : "Failed to record the delivery",
+        text: accessErrorMessage(
+          error,
+          [TONER_DELIVERIES_COLLECTION, TONER_STOCK_COLLECTION],
+          "Failed to record the delivery"
+        ),
       });
     }
   }
@@ -504,7 +521,11 @@ export default function Toners() {
       Swal.fire({
         icon: "error",
         title: "Could not save",
-        text: error instanceof Error ? error.message : "Failed to save toner stock",
+        text: accessErrorMessage(
+          error,
+          [TONER_STOCK_COLLECTION, TONER_DELIVERIES_COLLECTION],
+          "Failed to save toner stock"
+        ),
       });
     }
   }
@@ -546,7 +567,7 @@ export default function Toners() {
       Swal.fire({
         icon: "error",
         title: "Could not delete",
-        text: error instanceof Error ? error.message : "Failed to delete toner stock",
+        text: accessErrorMessage(error, TONER_STOCK_COLLECTION, "Failed to delete toner stock"),
       });
     } finally {
       await loadStock();
@@ -593,7 +614,10 @@ export default function Toners() {
   // normalized — all invisible until someone tries a replacement, wonders
   // why a cartridge never seems to move, or finds two records for the same
   // colour.
-  const printersWithoutTonerType = printers.filter((p) => !normalizeType(p.tonerType));
+  // Retired printers need no toner type, so they do not nag here.
+  const printersWithoutTonerType = printers.filter(
+    (p) => isInService(p) && !normalizeType(p.tonerType)
+  );
   const unusedPools = pools.filter((p) => printersUsing(printers, p.tonerType).length === 0);
   const collisions = findPoolCollisions(pools);
 

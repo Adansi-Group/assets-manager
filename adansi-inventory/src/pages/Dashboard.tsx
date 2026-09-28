@@ -22,7 +22,8 @@ import {
 } from "recharts";
 import { getPrinters } from "../services/printerService";
 import { getGadgets } from "../services/gadgetsService";
-import { getTonerStock } from "../services/tonerStockService";
+import { getTonerStock, TONER_STOCK_COLLECTION } from "../services/tonerStockService";
+import { accessErrorMessage } from "../toners/accessErrors";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
 import type { Gadget } from "../types/gadget";
@@ -93,7 +94,7 @@ export default function Dashboard() {
         setTonerError(null);
       } catch (error) {
         console.error("Error loading toner stock for dashboard:", error);
-        setTonerError(error instanceof Error ? error.message : "Could not load toner stock.");
+        setTonerError(accessErrorMessage(error, TONER_STOCK_COLLECTION, "Could not load toner stock."));
       }
     } finally {
       setLoading(false);

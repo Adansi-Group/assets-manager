@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
 import { Download, DollarSign, TrendingUp, Calendar, PieChart, Package, AlertTriangle } from "lucide-react";
-import { getTonersStrict } from "../services/tonerService";
-import { getTonerDeliveries } from "../services/tonerDeliveryService";
+import { getTonersStrict, TONERS_COLLECTION } from "../services/tonerService";
+import { getTonerDeliveries, TONER_DELIVERIES_COLLECTION } from "../services/tonerDeliveryService";
+import { accessErrorMessage } from "../toners/accessErrors";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
 import { getGadgets } from "../services/gadgetsService";
 import { getPrinters } from "../services/printerService";
 import { getInventoryItems } from "../services/inventoryService";
-import { getAllReplacements } from "../services/Tonerreplacementservice";
+import { getAllReplacementsStrict, REPLACEMENTS_COLLECTION } from "../services/Tonerreplacementservice";
 import type { Toner, TonerDelivery, TonerReplacement } from "../types/toner";
 import type { A4Sheet } from "../types/A4Sheet";
 import type { InternetUsage } from "../types/InternetUsage";
@@ -74,13 +75,20 @@ export default function ConsolidatedReport() {
           getGadgets(),
           getPrinters(),
           getInventoryItems(),
-          getAllReplacements(),
+          // Throws on failure: "no replacements" on a failed read would be false.
+          getAllReplacementsStrict(),
         ]);
       setData({ toners, deliveries, a4Sheets, internet, gadgets, printers, inventory, replacements });
     } catch (error) {
       console.error("Error loading consolidated report:", error);
       setData(EMPTY);
-      setLoadError(error instanceof Error ? error.message : "Could not load the report data.");
+      setLoadError(
+        accessErrorMessage(
+          error,
+          [TONER_DELIVERIES_COLLECTION, REPLACEMENTS_COLLECTION, TONERS_COLLECTION],
+          "Could not load the report data."
+        )
+      );
     } finally {
       setLoading(false);
     }

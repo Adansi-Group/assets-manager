@@ -25,7 +25,7 @@ import type { Printer, TonerLevel, TonerColor } from "../types/printer";
 import { normalizeType, findPool } from "../toners/pools";
 import { TONER_STOCK_COLLECTION } from "./tonerStockService";
 
-const REPLACEMENTS_COLLECTION = "toner_replacements";
+export const REPLACEMENTS_COLLECTION = "toner_replacements";
 const PRINTERS_COLLECTION = "printers";
 
 export class TonerStockError extends Error {
@@ -173,6 +173,26 @@ export async function getTonerReplacements(
     console.error("Error fetching toner replacements:", error);
     return [];
   }
+}
+
+/**
+ * Every replacement record, newest first. Throws on failure — an empty list
+ * would let a report say "no toner replacements were recorded", which is a
+ * claim, not an absence of data. Reports use this; getAllReplacements stays
+ * for screens that already cope with an empty list.
+ */
+export async function getAllReplacementsStrict(): Promise<TonerReplacement[]> {
+  const q = query(
+    collection(db, REPLACEMENTS_COLLECTION),
+    orderBy("createdAt", "desc")
+  );
+
+  const snapshot = await getDocs(q);
+
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...(doc.data() as Omit<TonerReplacement, "id">),
+  }));
 }
 
 // Get all replacement records (for reporting)

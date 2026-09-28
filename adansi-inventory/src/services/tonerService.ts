@@ -22,7 +22,7 @@ import type { Toner } from "../types/toner";
 import { tonerStatus } from "../toners/stockLevel";
 import { getTonerReorderLevel } from "./notificationService";
 
-const TONERS_COLLECTION = "toners";
+export const TONERS_COLLECTION = "toners";
 const TONER_TYPES_COLLECTION = "toner_types";
 
 // ============================================================================

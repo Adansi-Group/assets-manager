@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findPool, poolKey, printersUsing } from "./pools";
+import { findPool, isInService, poolKey, printersUsing } from "./pools";
 
 const pool = (tonerType: string, colorType: string, quantity = 1) =>
   ({ id: `${tonerType}-${colorType}`, tonerType, colorType, quantity, dateBrought: "2026-02-13" });
@@ -61,5 +61,27 @@ describe("printersUsing", () => {
 
   it("returns nothing for a cartridge no printer takes", () => {
     expect(printersUsing(printers, "C-EXV65")).toEqual([]);
+  });
+});
+
+describe("retired printers", () => {
+  const printers = [
+    { id: "ceo", tonerType: "222A", status: "Active" },
+    { id: "repair", tonerType: "222A", status: "In Repair" },
+    { id: "old", tonerType: "222A", status: "Retired" },
+    { id: "only-old", tonerType: "85A", status: "Retired" },
+  ];
+
+  it("are not counted as using a cartridge", () => {
+    expect(printersUsing(printers, "222A").map((p) => p.id)).toEqual(["ceo", "repair"]);
+  });
+
+  it("leave a cartridge only they took with no printer using it", () => {
+    expect(printersUsing(printers, "85A")).toEqual([]);
+  });
+
+  it("are the only printers out of service", () => {
+    expect(printers.filter(isInService).map((p) => p.id)).toEqual(["ceo", "repair"]);
+    expect(isInService({})).toBe(true);
   });
 });

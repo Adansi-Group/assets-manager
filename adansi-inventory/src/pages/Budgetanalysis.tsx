@@ -3,7 +3,8 @@
 
 import { useCallback, useState, useEffect } from "react";
 import { Download, TrendingUp, AlertCircle, CheckCircle } from "lucide-react";
-import { getTonerStock } from "../services/tonerStockService";
+import { getTonerStock, TONER_STOCK_COLLECTION } from "../services/tonerStockService";
+import { accessErrorMessage } from "../toners/accessErrors";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
 
@@ -51,7 +52,8 @@ export default function BudgetAnalysis() {
       setError(null);
     } catch (e) {
       console.error("Error loading budget analysis data:", e);
-      setError(e instanceof Error ? e.message : "Could not load budget analysis data.");
+      // Only the toner-stock read throws; the A4 and internet reads swallow.
+      setError(accessErrorMessage(e, TONER_STOCK_COLLECTION, "Could not load budget analysis data."));
     } finally {
       setLoading(false);
     }

@@ -13,6 +13,9 @@ import Swal from "sweetalert2";
 import type { TonerStock } from "../types/toner";
 import { getAllTonerTypes, addTonerType } from "../services/tonerService";
 import { optionsKeeping, TONER_COLOURS } from "../toners/colours";
+import { accessErrorMessage } from "../toners/accessErrors";
+import { TONER_STOCK_COLLECTION } from "../services/tonerStockService";
+import { TONER_DELIVERIES_COLLECTION } from "../services/tonerDeliveryService";
 
 type Props = {
   onClose: () => void;
@@ -153,7 +156,11 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
       Swal.fire({
         icon: "error",
         title: "Could not save",
-        text: error instanceof Error ? error.message : "Failed to save toner",
+        text: accessErrorMessage(
+          error,
+          [TONER_STOCK_COLLECTION, TONER_DELIVERIES_COLLECTION],
+          "Failed to save toner"
+        ),
       });
     } finally {
       setSaving(false);

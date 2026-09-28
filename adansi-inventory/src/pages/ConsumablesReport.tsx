@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, Download, FileText, Timer, Droplets, PackageCheck, FileType2 } from "lucide-react";
-import { getTonerStock } from "../services/tonerStockService";
-import { getAllReplacements } from "../services/Tonerreplacementservice";
+import { getTonerStock, TONER_STOCK_COLLECTION } from "../services/tonerStockService";
+import { getAllReplacementsStrict, REPLACEMENTS_COLLECTION } from "../services/Tonerreplacementservice";
+import { accessErrorMessage } from "../toners/accessErrors";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getPrintersStrict } from "../services/printerService";
 import type { TonerStock, TonerReplacement } from "../types/toner";
@@ -27,7 +28,7 @@ export default function ConsumablesReport() {
     try {
       const [t, r, s, p] = await Promise.all([
         getTonerStock(),
-        getAllReplacements(),
+        getAllReplacementsStrict(),
         getA4Sheets(),
         getPrintersStrict(),
       ]);
@@ -37,7 +38,13 @@ export default function ConsumablesReport() {
       // zero report — that reads as "nothing in stock" rather than
       // "we could not load the stock".
       console.error("Error loading the consumables report:", e);
-      setError(e instanceof Error ? e.message : "Could not load the consumables report.");
+      setError(
+        accessErrorMessage(
+          e,
+          [TONER_STOCK_COLLECTION, REPLACEMENTS_COLLECTION],
+          "Could not load the consumables report."
+        )
+      );
     } finally {
       setLoading(false);
     }

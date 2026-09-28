@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { Download, Layers, Printer as PrinterIcon, TriangleAlert } from "lucide-react";
 import Swal from "sweetalert2";
-import { getTonerStock } from "../services/tonerStockService";
-import { getPrintersStrict } from "../services/printerService";
+import { getTonerStock, TONER_STOCK_COLLECTION } from "../services/tonerStockService";
+import { getPrintersStrict, PRINTERS_COLLECTION } from "../services/printerService";
+import { accessErrorMessage } from "../toners/accessErrors";
 import type { TonerStock } from "../types/toner";
 import type { Printer } from "../types/printer";
 import { printersUsing } from "../toners/pools";
@@ -32,7 +33,13 @@ export default function TonerReports() {
       // zero report — that reads as "nothing in stock" rather than "we
       // could not load the stock".
       console.error("Error loading the toner report:", e);
-      setError(e instanceof Error ? e.message : "Could not load the toner report.");
+      setError(
+        accessErrorMessage(
+          e,
+          [TONER_STOCK_COLLECTION, PRINTERS_COLLECTION],
+          "Could not load the toner report."
+        )
+      );
     } finally {
       setLoading(false);
     }

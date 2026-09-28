@@ -20,12 +20,13 @@ import { renderReportPdf } from "../reports/shared/pdf/renderPdf";
 import { DEFAULT_TONER_REORDER_LEVEL } from "../toners/stockLevel";
 import { buildStationReport } from "../reports/station/model";
 import { narrateStation } from "../reports/station/narrate";
-import { getTonersStrict } from "../services/tonerService";
-import { getTonerStock } from "../services/tonerStockService";
-import { getTonerDeliveries } from "../services/tonerDeliveryService";
+import { getTonersStrict, TONERS_COLLECTION } from "../services/tonerService";
+import { getTonerStock, TONER_STOCK_COLLECTION } from "../services/tonerStockService";
+import { getTonerDeliveries, TONER_DELIVERIES_COLLECTION } from "../services/tonerDeliveryService";
+import { accessErrorMessage } from "../toners/accessErrors";
 import { getPrintersStrict } from "../services/printerService";
 import { getTonerReorderLevel } from "../services/notificationService";
-import { getAllReplacements } from "../services/Tonerreplacementservice";
+import { getAllReplacementsStrict, REPLACEMENTS_COLLECTION } from "../services/Tonerreplacementservice";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
 import { getGadgets } from "../services/gadgetsService";
@@ -98,7 +99,8 @@ export default function Reports() {
         // Throws on failure, so the page shows an error rather than "none received".
         getTonerDeliveries(),
         getPrintersStrict(),
-        getAllReplacements(),
+        // Throws on failure, so the page never says "no replacements were recorded" on a failed read.
+        getAllReplacementsStrict(),
         getA4Sheets(),
         getInternetUsage(),
         getGadgets(),
@@ -115,7 +117,13 @@ export default function Reports() {
       setReorderLevel(level);
     } catch (e) {
       console.error("Error loading report summaries:", e);
-      setError(e instanceof Error ? e.message : "Could not load the report summaries.");
+      setError(
+        accessErrorMessage(
+          e,
+          [TONER_DELIVERIES_COLLECTION, TONER_STOCK_COLLECTION, REPLACEMENTS_COLLECTION, TONERS_COLLECTION],
+          "Could not load the report summaries."
+        )
+      );
     } finally {
       setLoading(false);
     }

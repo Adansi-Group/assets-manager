@@ -39,12 +39,23 @@ export function findPool<P extends PoolLike>(
   return pools.find((pool) => poolKey(pool.tonerType, pool.colorType) === wanted);
 }
 
-/** Every printer that takes this cartridge. Derived, so it cannot go stale. */
-export function printersUsing<P extends { tonerType?: string }>(
+/** A retired printer draws on no stock and needs no toner type. */
+export function isInService<P extends { status?: string }>(printer: P): boolean {
+  return printer.status !== "Retired";
+}
+
+/**
+ * Every printer in service that takes this cartridge. Derived, so it cannot
+ * go stale. Retired printers are left out: counting them would keep a pool
+ * no working printer uses looking "used".
+ */
+export function printersUsing<P extends { tonerType?: string; status?: string }>(
   printers: P[],
   tonerType: string
 ): P[] {
   const wanted = normalizeType(tonerType);
   if (!wanted) return [];
-  return printers.filter((printer) => normalizeType(printer.tonerType) === wanted);
+  return printers.filter(
+    (printer) => isInService(printer) && normalizeType(printer.tonerType) === wanted
+  );
 }
