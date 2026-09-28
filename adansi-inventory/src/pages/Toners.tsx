@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import AddTonerModal from "../components/AddTonerModal";
-import type { Toner, TonerStock } from "../types/toner";
+import type { TonerStock } from "../types/toner";
 import { lowToners, type TonerStockStatus } from "../toners/stockLevel";
 import { normalizeType, printersUsing } from "../toners/pools";
 import { getPrinters } from "../services/printerService";
@@ -83,9 +83,7 @@ function usedByLabel(n: number): string {
 export default function Toners() {
   const [pools, setPools] = useState<TonerStock[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
-  // Typed against the modal's still-legacy prop shape until Task 8 narrows it
-  // to a pool; only the fields a pool actually has are ever populated.
-  const [editing, setEditing] = useState<Toner | null>(null);
+  const [editing, setEditing] = useState<TonerStock | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -201,46 +199,19 @@ export default function Toners() {
     });
   }
 
-  // Typed to match the modal's current (pre-Task-8) prop shape; Task 8
-  // narrows this to Omit<TonerStock, "id"> once the modal only collects a
-  // pool's own fields.
-  async function handleSave(input: Toner | Omit<Toner, "id">) {
-    const pool: Omit<TonerStock, "id"> = {
-      tonerType: input.tonerType,
-      colorType: input.colorType,
-      quantity: input.quantity,
-      dateBrought: input.dateBrought,
-      ...(input.initialQuantity !== undefined && { initialQuantity: input.initialQuantity }),
-      ...(input.lastCheckedDate !== undefined && { lastCheckedDate: input.lastCheckedDate }),
-      ...(input.costPerUnit !== undefined && { costPerUnit: input.costPerUnit }),
-    };
-
-    try {
-      if ("id" in input) {
-        await updateTonerStock({ ...pool, id: input.id });
-      } else {
-        await addTonerStock(pool);
-      }
-
-      await loadStock();
-      setEditing(null);
-      navigate("/toners");
-
-      Swal.fire({
-        icon: "success",
-        title: "id" in input ? "Toner Updated" : "Toner Added",
-        timer: 1500,
-        showConfirmButton: false,
-      });
-    } catch (error) {
-      // Surfaces addTonerStock's duplicate-pool error (and any other save
-      // failure) by its real message rather than a generic one.
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: error instanceof Error ? error.message : "Failed to save toner",
-      });
+  // The modal awaits this and shows any failure (including addTonerStock's
+  // duplicate-pool error) itself, so this stays a plain write with no
+  // try/catch of its own.
+  async function handleSave(pool: Omit<TonerStock, "id">) {
+    if (editing) {
+      await updateTonerStock({ ...pool, id: editing.id });
+    } else {
+      await addTonerStock(pool);
     }
+
+    await loadStock();
+    setEditing(null);
+    navigate("/toners");
   }
 
   async function handleQuantityUpdate(row: CartridgeRow) {
@@ -653,22 +624,7 @@ export default function Toners() {
                       onClick={() => {
                         const record = row.colors[row.selectedColor] ?? Object.values(row.colors)[0];
                         if (!record) return;
-                        // The modal still expects a Toner shape until Task 8;
-                        // location/printerType have no pool equivalent, so
-                        // they are left blank rather than invented.
-                        setEditing({
-                          id: record.id,
-                          location: "",
-                          printerType: "",
-                          tonerType: record.tonerType,
-                          colorType: record.colorType,
-                          quantity: record.quantity,
-                          dateBrought: record.dateBrought,
-                          initialQuantity: record.initialQuantity,
-                          lastCheckedDate: record.lastCheckedDate,
-                          costPerUnit: record.costPerUnit,
-                          status: record.status,
-                        });
+                        setEditing(record);
                         navigate("/toners/add");
                       }}
                       className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"

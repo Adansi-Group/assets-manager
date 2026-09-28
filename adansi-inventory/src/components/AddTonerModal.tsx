@@ -5,46 +5,30 @@
 
 
 
+
+
 import { useState, useEffect } from "react";
 import { X, Plus } from "lucide-react";
 import Swal from "sweetalert2";
-import type { Toner } from "../types/toner";
+import type { TonerStock } from "../types/toner";
 import { getAllTonerTypes, addTonerType } from "../services/tonerService";
-import { getPrinters } from "../services/printerService";
-import { selectablePrinterModels } from "../toners/stockMatching";
-import type { Printer } from "../types/printer";
 
 type Props = {
   onClose: () => void;
-  onSave: (toner: Toner | Omit<Toner, "id">) => void;
-  existing?: Toner;
-};
-
-// Toner to Printer compatibility mapping
-const TONER_PRINTER_MAP: Record<string, string[]> = {
-  "415A": ["HP Color LaserJet Pro MFP M479fdw"],
-  "207A": ["HP Color LaserJet Pro MFP M283fdw"],
-  "222A": ["HP Color LaserJet Pro MFP M283fdw"],
-  "222A-CEO": ["HP Color Laser Jet Pro MFP 3303"], // Updated to correct printer
-  "CARTRIDGE 069": ["i-SENSYS MF752Cdw"],
-  "C-EXV54": ["Canon imageRunner C3025i"],
-  "C-EXV65": ["Canon imageRunner C3326i"],
-  "PIXMA 446": ["Canon PIXMA TS3440"],
+  onSave: (pool: Omit<TonerStock, "id">) => void | Promise<void>;
+  existing?: TonerStock;
 };
 
 export default function AddTonerModal({ onClose, onSave, existing }: Props) {
-  const [location, setLocation] = useState("");
-  const [room, setRoom] = useState(""); // NEW: Room/office field
-  const [printerType, setPrinterType] = useState("");
   const [tonerType, setTonerType] = useState("");
   const [colorType, setColorType] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [initialQuantity, setInitialQuantity] = useState(1);
   const [enableTracking, setEnableTracking] = useState(false);
-  
+  const [saving, setSaving] = useState(false);
+
   // Toner types from Firebase
   const [tonerTypes, setTonerTypes] = useState<string[]>([]);
-  const [printers, setPrinters] = useState<Printer[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
 
   async function loadTonerTypes() {
@@ -61,20 +45,6 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
     })();
   }, []);
 
-  // The printers that actually exist decide what a record may be filed under,
-  // so a saved model always names one of them.
-  useEffect(() => {
-    (async () => {
-      setPrinters(await getPrinters());
-    })();
-  }, []);
-
-  // Get compatible printers based on selected toner. The map is only a hint
-  // now: the list itself comes from the printers on record.
-  const compatiblePrinters = tonerType
-    ? selectablePrinterModels(printers, TONER_PRINTER_MAP[tonerType] || [], existing?.printerType)
-    : [];
-
   // Handle adding new toner type
   async function handleAddTonerType() {
     const result = await Swal.fire({
@@ -84,16 +54,13 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
           <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Enter the toner type/model number (e.g., "415A", "C-EXV65")
           </p>
-          <input 
-            id="toner-type-input" 
-            type="text" 
-            placeholder="e.g., 415A" 
+          <input
+            id="toner-type-input"
+            type="text"
+            placeholder="e.g., 415A"
             class="swal2-input"
             style="margin: 0; width: 100%; text-transform: uppercase;"
           />
-          <p class="text-xs text-amber-600 dark:text-amber-400 mt-2">
-            ⚠️ Note: You'll need to manually add this toner to the printer compatibility mapping in the code.
-          </p>
         </div>
       `,
       showCancelButton: true,
@@ -102,17 +69,17 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
       preConfirm: () => {
         const input = document.getElementById('toner-type-input') as HTMLInputElement;
         const value = input.value.trim().toUpperCase();
-        
+
         if (!value) {
           Swal.showValidationMessage('Please enter a toner type');
           return false;
         }
-        
+
         if (tonerTypes.includes(value)) {
           Swal.showValidationMessage('This toner type already exists');
           return false;
         }
-        
+
         return value;
       }
     });
@@ -122,7 +89,7 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
         await addTonerType(result.value);
         await loadTonerTypes(); // Reload the list
         setTonerType(result.value); // Auto-select the new type
-        
+
         Swal.fire({
           icon: 'success',
           title: 'Toner Type Added!',
@@ -140,28 +107,10 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
     }
   }
 
-  // Auto-reset printer type when toner type changes
-  const [prevTonerType, setPrevTonerType] = useState(tonerType);
-  if (tonerType !== prevTonerType) {
-    setPrevTonerType(tonerType);
-    if (tonerType && !existing) {
-      // If there's only one compatible printer, auto-select it
-      if (compatiblePrinters.length === 1) {
-        setPrinterType(compatiblePrinters[0]);
-      } else if (!compatiblePrinters.includes(printerType)) {
-        // Reset printer type if current selection is not compatible
-        setPrinterType("");
-      }
-    }
-  }
-
-  // Populate form fields once when editing an existing toner
+  // Populate form fields once when editing an existing pool
   const [initialized, setInitialized] = useState(false);
   if (existing && !initialized) {
     setInitialized(true);
-    setLocation(existing.location);
-    setRoom(existing.room || ""); // Load room if exists
-    setPrinterType(existing.printerType);
     setTonerType(existing.tonerType);
     setColorType(existing.colorType);
     setQuantity(existing.quantity);
@@ -169,13 +118,10 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
     setEnableTracking(!!(existing.initialQuantity && existing.lastCheckedDate));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const toner: Omit<Toner, "id"> & { id?: string } = {
-      location,
-      room: room.trim() || undefined, // Only save if not empty
-      printerType,
+    const pool: Omit<TonerStock, "id"> = {
       tonerType,
       colorType,
       quantity,
@@ -186,20 +132,30 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
       }),
     };
 
-    if (existing) {
-      onSave({ ...toner, id: existing.id });
-    } else {
-      onSave(toner);
+    setSaving(true);
+    try {
+      await onSave(pool);
+
+      Swal.fire({
+        icon: "success",
+        title: existing ? "Toner updated" : "Toner added",
+        timer: 1200,
+        showConfirmButton: false,
+      });
+
+      onClose();
+    } catch (error) {
+      // Surfaces addTonerStock's duplicate-pool error (and any other save
+      // failure) instead of letting it throw unhandled; the form stays open
+      // so the mistake can be corrected.
+      Swal.fire({
+        icon: "error",
+        title: "Could not save",
+        text: error instanceof Error ? error.message : "Failed to save toner",
+      });
+    } finally {
+      setSaving(false);
     }
-
-    Swal.fire({
-      icon: "success",
-      title: existing ? "Toner updated" : "Toner added",
-      timer: 1200,
-      showConfirmButton: false,
-    });
-
-    onClose();
   }
 
   return (
@@ -223,40 +179,6 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-6">
-              {/* Location */}
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-900 dark:text-white">Location</label>
-                <select
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-green-500 focus:outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  required
-                >
-                  <option value="">Select location</option>
-                  <option>Travel House</option>
-                  <option>Ashaley Botwe Branch</option>
-                  <option>Nester Square Branch</option>
-                  <option>Tema Branch</option>
-                  <option>Takoradi Branch</option>
-                  <option>Kumasi Branch</option>
-                  <option>Tarkwa Branch</option>
-                </select>
-              </div>
-
-              {/* Room/Office - NEW FIELD */}
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-900 dark:text-white">
-                  Room/Office <span className="text-gray-400 text-xs">(Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={room}
-                  onChange={(e) => setRoom(e.target.value)}
-                  placeholder="e.g., CEO's Office, First Floor, HR"
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-green-500 focus:outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
-              </div>
-
               {/* Toner Type - WITH ADD BUTTON */}
               <div>
                 <label className="block text-sm font-medium mb-2 text-gray-900 dark:text-white">
@@ -279,7 +201,7 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
                       </option>
                     ))}
                   </select>
-                  
+
                   {/* ADD BUTTON */}
                   <button
                     type="button"
@@ -291,34 +213,6 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
                     Add
                   </button>
                 </div>
-              </div>
-
-              {/* Printer Type - AUTO-FILTERED */}
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-900 dark:text-white">
-                  Printer Type {tonerType && <span className="text-xs text-green-600 dark:text-green-400">(Auto-filtered)</span>}
-                </label>
-                <select
-                  value={printerType}
-                  onChange={(e) => setPrinterType(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-green-500 focus:outline-none disabled:bg-gray-100 dark:disabled:bg-gray-800 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  required
-                  disabled={!tonerType}
-                >
-                  <option value="">
-                    {tonerType ? "Select compatible printer" : "Select toner type first"}
-                  </option>
-                  {compatiblePrinters.map((printer) => (
-                    <option key={printer} value={printer}>
-                      {printer}
-                    </option>
-                  ))}
-                </select>
-                {tonerType && compatiblePrinters.length === 0 && (
-                  <p className="text-xs text-red-500 dark:text-red-400 mt-1">
-                    No printers are on record yet. Add the printer on the Printers page first, so this stock can be linked to it.
-                  </p>
-                )}
               </div>
 
               {/* Color Type */}
@@ -408,7 +302,8 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
               </button>
               <button
                 type="submit"
-                className="bg-green-600 text-white px-8 py-2 rounded-lg hover:bg-green-700"
+                disabled={saving}
+                className="bg-green-600 text-white px-8 py-2 rounded-lg hover:bg-green-700 disabled:opacity-60"
               >
                 {existing ? "Update Toner" : "Add Toner"}
               </button>
