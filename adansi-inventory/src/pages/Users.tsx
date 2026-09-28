@@ -8,7 +8,11 @@ import type { User, UserRole } from "../types/users";
 import { Users as UsersIcon, Plus, Edit, Trash2, Shield, Mail, UserCheck } from "lucide-react";
 import Swal from "sweetalert2";
 
-export default function Users() {
+// `currentUser` is unused here; Task 4 rewrites this page to consume it.
+// Referencing it avoids an unused-var lint failure while keeping the
+// prop typed so App.tsx's route wiring typechecks in this commit.
+export default function Users({ currentUser }: { currentUser: User }) {
+  void currentUser;
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 

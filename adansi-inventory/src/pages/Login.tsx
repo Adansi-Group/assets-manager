@@ -3,7 +3,6 @@
 
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { login, loginWithGoogle } from "../services/authService";
 import { FirebaseError } from "firebase/app";
 import Swal from "sweetalert2";
@@ -29,19 +28,24 @@ function getAuthErrorMessage(error: unknown, fallback: string) {
   }
 }
 
-export default function Login() {
+export default function Login({
+  notice,
+  onClearNotice,
+}: {
+  notice?: string | null;
+  onClearNotice?: () => void;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    onClearNotice?.();
     setLoading(true);
 
     try {
       await login(email, password);
-      navigate("/dashboard");
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -54,11 +58,11 @@ export default function Login() {
   }
 
   async function handleGoogleLogin() {
+    onClearNotice?.();
     setLoading(true);
 
     try {
       await loginWithGoogle();
-      navigate("/dashboard");
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -95,6 +99,12 @@ export default function Login() {
               ADANSI TRAVELS
             </span>
           </div>
+
+          {notice && (
+            <div role="alert" className="mb-6 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+              {notice}
+            </div>
+          )}
 
           <h2 className="text-2xl font-bold mb-6">SIGN IN</h2>
 

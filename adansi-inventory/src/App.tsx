@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { onAuthStateChanged } from "firebase/auth";
-import type { User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "./firebase/firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from "./firebase/firebase";
 import type { User, Permission } from "./types/users";
 import { hasPermission } from "./types/users";
+import { lookupMember } from "./services/memberService";
+import { decideAccess, refusalMessage } from "./access/members";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -37,44 +37,50 @@ import Inventory from "./pages/Inventory";
 import InventoryCategory from "./pages/inventory/InventoryCategory";
 
 export default function App() {
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    // Guards against a stale lookup (from an earlier auth event) setting
+    // currentUser after a newer event has already superseded it — e.g. a
+    // quick sign-in followed by sign-out while the lookup is still in flight.
+    let seq = 0;
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      if (fbUser) {
-        try {
-          const userDoc = await getDoc(doc(db, "users", fbUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data() as Omit<User, "id">;
-            setCurrentUser({
-              id: fbUser.uid,
-              ...userData,
-            });
-          } else {
-            setCurrentUser({
-              id: fbUser.uid,
-              email: fbUser.email || "",
-              name: fbUser.displayName || fbUser.email?.split("@")[0] || "User",
-              role: "Viewer",
-              createdAt: new Date().toISOString(),
-            });
-          }
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-        }
-      } else {
+      const mySeq = ++seq;
+      if (!fbUser) {
+        // Keep any refusal notice: this callback also fires after we sign a
+        // non-member out, and the login page must still say why.
         setCurrentUser(null);
+        setChecking(false);
+        return;
       }
-      setFirebaseUser(fbUser);
-      setLoading(false);
+      setChecking(true);
+      const lookup = await lookupMember(fbUser.email ?? "");
+      if (mySeq !== seq) return;
+      const decision = decideAccess(fbUser.email, lookup);
+      if (!decision.allowed) {
+        setNotice(refusalMessage(decision.reason));
+        setCurrentUser(null);
+        await signOut(auth);
+        setChecking(false);
+        return;
+      }
+      setNotice(null);
+      setCurrentUser({
+        id: fbUser.uid,
+        email: decision.member.email,
+        name: decision.member.name,
+        role: decision.member.role,
+        department: decision.member.department,
+        createdAt: decision.member.createdAt,
+      });
+      setChecking(false);
     });
-
     return () => unsubscribe();
   }, []);
 
-  if (loading) {
+  if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
         <div className="text-center">
@@ -93,12 +99,18 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route 
-          path="/" 
-          element={firebaseUser ? <Navigate to="/dashboard" /> : <Login />} 
+        <Route
+          path="/"
+          element={
+            currentUser ? (
+              <Navigate to="/dashboard" />
+            ) : (
+              <Login notice={notice} onClearNotice={() => setNotice(null)} />
+            )
+          }
         />
 
-        <Route element={firebaseUser ? <AdminLayout currentUser={currentUser} /> : <Navigate to="/" />}>
+        <Route element={currentUser ? <AdminLayout currentUser={currentUser} /> : <Navigate to="/" />}>
           <Route path="/dashboard" element={<Dashboard />} />
           
           {/* PRINTERS */}
@@ -172,7 +184,7 @@ export default function App() {
 
           {/* USERS */}
           {canAccess("manage_users") && (
-            <Route path="/users" element={<Users />} />
+            <Route path="/users" element={<Users currentUser={currentUser!} />} />
           )}
 
           {/* SETTINGS */}
@@ -190,9 +202,9 @@ export default function App() {
           <Route path="/profile" element={<Profile />} />
         </Route>
 
-        <Route 
-          path="*" 
-          element={<Navigate to={firebaseUser ? "/dashboard" : "/"} />} 
+        <Route
+          path="*"
+          element={<Navigate to={currentUser ? "/dashboard" : "/"} />}
         />
       </Routes>
     </BrowserRouter>
