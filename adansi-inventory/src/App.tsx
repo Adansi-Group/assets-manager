@@ -5,6 +5,7 @@ import { auth } from "./firebase/firebase";
 import type { User, Permission } from "./types/users";
 import { hasPermission } from "./types/users";
 import { lookupMember } from "./services/memberService";
+import { readSignIn } from "./services/authService";
 import { decideAccess, refusalMessage } from "./access/members";
 
 import Login from "./pages/Login";
@@ -56,9 +57,12 @@ export default function App() {
         return;
       }
       setChecking(true);
-      const lookup = await lookupMember(fbUser.email ?? "");
+      const [lookup, signIn] = await Promise.all([
+        lookupMember(fbUser.email ?? ""),
+        readSignIn(fbUser),
+      ]);
       if (mySeq !== seq) return;
-      const decision = decideAccess(fbUser.email, lookup, fbUser.emailVerified);
+      const decision = decideAccess(fbUser.email, lookup, signIn);
       if (!decision.allowed) {
         setNotice(refusalMessage(decision.reason));
         setCurrentUser(null);

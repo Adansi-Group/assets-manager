@@ -1,10 +1,10 @@
 // src/pages/Users.tsx
 
 import { useEffect, useState } from "react";
-import type { User, UserRole } from "../types/users";
+import { isUserRole, type User, type UserRole } from "../types/users";
 import type { Member } from "../types/member";
 import { getMembers, addMember, updateMember, removeMember } from "../services/memberService";
-import { memberChangeProblem } from "../access/members";
+import { memberChangeProblem, memberEntryProblem } from "../access/members";
 import { accessErrorMessage } from "../toners/accessErrors";
 import { Users as UsersIcon, Plus, Edit, Trash2, Shield, Mail, UserCheck } from "lucide-react";
 import Swal from "sweetalert2";
@@ -127,6 +127,7 @@ export default function Users({ currentUser }: { currentUser: User }) {
           <div>
             <label class="block text-sm font-medium mb-2">Role</label>
             <select id="role" class="swal2-input w-full">
+              ${isUserRole(member.role) ? "" : '<option value="" selected disabled>Pick a role</option>'}
               <option value="Admin" ${member.role === "Admin" ? "selected" : ""}>Admin</option>
               <option value="IT Manager" ${member.role === "IT Manager" ? "selected" : ""}>IT Manager</option>
               <option value="HR Manager" ${member.role === "HR Manager" ? "selected" : ""}>HR Manager</option>
@@ -366,6 +367,7 @@ export default function Users({ currentUser }: { currentUser: User }) {
           <tbody>
             {members.map((member) => {
               const removeProblem = memberChangeProblem(currentUser.email, member, { kind: "remove" });
+              const entryProblem = memberEntryProblem(member.email, member);
               return (
                 <tr
                   key={member.email}
@@ -379,6 +381,9 @@ export default function Users({ currentUser }: { currentUser: User }) {
                       <div>
                         <p className="font-medium text-gray-900 dark:text-white">{member.name}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{member.email}</p>
+                        {entryProblem && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1 max-w-xs">{entryProblem}</p>
+                        )}
                       </div>
                     </div>
                   </td>

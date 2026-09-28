@@ -5,16 +5,26 @@
 // it is refused — there is no default role, and a failed lookup refuses too.
 //
 // Being listed is not enough: anyone can register a password account for an
-// email they do not own. So the sign-in must be one the provider verified
-// (Google always does), unless the member entry says a password is expected.
+// email they do not own. So the sign-in must be a Google one with a verified
+// email, unless the member entry says a password is expected. The provider is
+// checked as well as the email because a password session opened before the
+// real owner's first Google sign-in would otherwise become verified with it.
 
 import type { Member } from "../types/member";
-import type { UserRole } from "../types/users";
+import { isUserRole, type UserRole } from "../types/users";
 
 export const ACCESS_COPY = {
   notMember: "You don't have access to Assets Station. Ask an administrator to add you.",
   lookupFailed: "Couldn't check your access. Please try again.",
+  badEntry: "Your entry on the members list has a mistake. Ask an administrator to check it.",
 } as const;
+
+/** How the person signed in, read from the same token the Firestore rules see. */
+export interface SignIn {
+  emailVerified: boolean;
+  /** e.g. "google.com" or "password". */
+  provider: string | null;
+}
 
 /** Emails compare the way a person reads them: case and surrounding spaces are noise. */
 export function normalizeEmail(email: string | null | undefined): string {
@@ -26,7 +36,7 @@ export type MemberLookup =
   | { status: "missing" }
   | { status: "failed" };
 
-export type RefusalReason = "no-email" | "not-member" | "unverified" | "lookup-failed";
+export type RefusalReason = "no-email" | "not-member" | "unverified" | "bad-entry" | "lookup-failed";
 
 export type AccessDecision =
   | { allowed: true; member: Member }
@@ -35,21 +45,48 @@ export type AccessDecision =
 export function decideAccess(
   tokenEmail: string | null | undefined,
   lookup: MemberLookup,
-  emailVerified: boolean
+  /** Null when the token could not be read. */
+  signIn: SignIn | null
 ): AccessDecision {
   const email = normalizeEmail(tokenEmail);
   if (!email) return { allowed: false, reason: "no-email" };
-  if (lookup.status === "failed") return { allowed: false, reason: "lookup-failed" };
+  if (lookup.status === "failed" || !signIn) return { allowed: false, reason: "lookup-failed" };
   if (lookup.status === "missing") return { allowed: false, reason: "not-member" };
   if (normalizeEmail(lookup.member.email) !== email) return { allowed: false, reason: "not-member" };
-  if (!emailVerified && lookup.member.passwordSignIn !== true) {
-    return { allowed: false, reason: "unverified" };
-  }
+  const trusted =
+    (signIn.provider === "google.com" && signIn.emailVerified) ||
+    (signIn.provider === "password" && lookup.member.passwordSignIn === true);
+  if (!trusted) return { allowed: false, reason: "unverified" };
+  // Only someone we trust is told their entry is broken.
+  if (!isUserRole(lookup.member.role)) return { allowed: false, reason: "bad-entry" };
   return { allowed: true, member: lookup.member };
 }
 
 export function refusalMessage(reason: RefusalReason): string {
-  return reason === "lookup-failed" ? ACCESS_COPY.lookupFailed : ACCESS_COPY.notMember;
+  if (reason === "lookup-failed") return ACCESS_COPY.lookupFailed;
+  if (reason === "bad-entry") return ACCESS_COPY.badEntry;
+  return ACCESS_COPY.notMember;
+}
+
+/**
+ * What is wrong with a members entry as stored, or null. The first entries
+ * are typed by hand in the console, where nothing checks them.
+ */
+export function memberEntryProblem(
+  id: string,
+  entry: { name?: unknown; role?: unknown }
+): string | null {
+  if (id !== normalizeEmail(id)) {
+    return "The id of this entry is not the email in lower case, so this person can't sign in. Remove it and add them again.";
+  }
+  if (!isUserRole(entry.role)) {
+    const shown = typeof entry.role === "string" && entry.role ? `"${entry.role}" is not a role` : "No role";
+    return `${shown}, so this person can't sign in. Edit them and pick a role.`;
+  }
+  if (typeof entry.name !== "string" || !entry.name.trim()) {
+    return "No name. Edit this person and add one.";
+  }
+  return null;
 }
 
 /**

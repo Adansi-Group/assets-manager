@@ -9,6 +9,13 @@
 
 export type UserRole = "Admin" | "IT Manager" | "HR Manager" | "Viewer";
 
+export const USER_ROLES: readonly UserRole[] = ["Admin", "IT Manager", "HR Manager", "Viewer"];
+
+/** Roles can be typed by hand in the console; anything else has no permissions to look up. */
+export function isUserRole(value: unknown): value is UserRole {
+  return USER_ROLES.includes(value as UserRole);
+}
+
 export type Permission = 
   | "view_dashboard"
   | "view_printers" | "manage_printers"

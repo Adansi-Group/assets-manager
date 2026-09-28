@@ -15,6 +15,13 @@ export const MEMBERS_COLLECTION = "members";
 
 const memberRef = (email: string) => doc(db, MEMBERS_COLLECTION, normalizeEmail(email));
 
+/**
+ * An entry that already exists, by the id it was stored under. An id typed by
+ * hand may not be lower case; normalising it would edit or remove a different
+ * document, or none.
+ */
+const storedRef = (id: string) => doc(db, MEMBERS_COLLECTION, id);
+
 function withoutUndefined<T extends object>(value: T): Partial<T> {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
@@ -37,7 +44,10 @@ export async function lookupMember(email: string): Promise<MemberLookup> {
 export async function getMembers(): Promise<Member[]> {
   const snap = await getDocs(collection(db, MEMBERS_COLLECTION));
   return snap.docs
-    .map((d) => ({ ...(d.data() as Member), email: d.id }))
+    .map((d) => {
+      const data = d.data() as Member;
+      return { ...data, name: typeof data.name === "string" ? data.name : "", email: d.id };
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -68,18 +78,18 @@ export async function addMember(
 }
 
 export async function updateMember(
-  email: string,
+  id: string,
   patch: Pick<Member, "name" | "role"> & { department?: string }
 ): Promise<void> {
   const name = patch.name.trim();
   if (!name) throw new Error("Enter a name.");
-  await updateDoc(memberRef(email), {
+  await updateDoc(storedRef(id), {
     name,
     role: patch.role,
     department: patch.department?.trim() ?? "",
   });
 }
 
-export async function removeMember(email: string): Promise<void> {
-  await deleteDoc(memberRef(email));
+export async function removeMember(id: string): Promise<void> {
+  await deleteDoc(storedRef(id));
 }

@@ -13,11 +13,15 @@ service cloud.firestore {
     }
 
     // Being listed is not enough: anyone can register a password account for
-    // an email they do not own. Trust the sign-in only if the provider
-    // verified the email (Google does), or the member entry expects a password.
+    // an email they do not own. Trust a Google sign-in with a verified email,
+    // or a password sign-in when the member entry expects one. The provider
+    // is checked as well as the email: a password session opened before the
+    // real owner's first Google sign-in would otherwise become verified with it.
     function verified() { return request.auth.token.email_verified == true; }
+    function provider() { return request.auth.token.firebase.sign_in_provider; }
     function trusted(member) {
-      return verified() || member.get('passwordSignIn', false) == true;
+      return (provider() == 'google.com' && verified())
+        || (provider() == 'password' && member.get('passwordSignIn', false) == true);
     }
 
     function isMember() {

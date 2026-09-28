@@ -8,8 +8,10 @@
 **Sign-up stays ON; switch-over step 4 is withdrawn.** Firebase's "Enable create (sign-up)" switch
 blocks every first-time sign-in, Google included, so it would refuse mannan@, the re-created eobeng@
 account (step 2b) and every member added later. The user chose to enforce trust in the rules and the
-app instead: a sign-in counts only if its email is verified by the provider (`email_verified`), or the
-member entry carries `passwordSignIn: true` (hr@ only, set by hand). This replaces the "Password
+app instead: a sign-in counts only if it is a Google sign-in with a verified email (`email_verified`
+and `sign_in_provider == 'google.com'`), or a password sign-in by a member whose entry carries
+`passwordSignIn: true` (hr@ only, set by hand). A listed person whose entry has a role the app does not
+know is refused with "Your entry on the members list has a mistake. Ask an administrator to check it." This replaces the "Password
 accounts" paragraph in §4. A person may also read their **own** `members` entry, so the app can tell
 "not on the list" from "couldn't check". The runbook
 (`docs/superpowers/runbooks/2026-09-28-members-switch-over.md`) is the current order of steps.
