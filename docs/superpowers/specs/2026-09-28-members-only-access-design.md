@@ -32,7 +32,11 @@ just the UI. Within the app, each role can change only what the app already perm
 - `admin@test.com` ("System Admin") is **removed**.
 - `hr@adansitravels.com` **keeps its password login**, role HR Manager.
 - `mannan@adansitravels.com` (the boss) signs in **with Google**, role **Admin**.
-- `it-intern@adansitravels.com` stays **Admin**; its duplicate `users` entry disappears with the old collection.
+- The user's own Google account is now **`eobeng@adansitravels.com`** (renamed from it-intern@), role **Admin**.
+  Verified 2026-09-28: Google's provider data says `eobeng@adansitravels.com`, but the Firebase Auth record
+  and the ID token's `email` claim still say `it-intern@adansitravels.com` (Firebase stores the email at
+  account creation and does not refresh it). Rules read the token claim, so the old Auth record must be
+  replaced before the rules go live — see switch-over step 2b.
 
 ## Design
 
@@ -54,8 +58,9 @@ interface Member {
 Keyed by email because a person can be added before they have ever signed in (Google users have no uid
 until first sign-in), and because Firestore rules can read `request.auth.token.email` directly.
 
-Starting list: it-intern@adansitravels.com (Admin), mannan@adansitravels.com (Admin),
-hr@adansitravels.com (HR Manager). Nobody else.
+Starting list: eobeng@adansitravels.com (Admin), mannan@adansitravels.com (Admin),
+hr@adansitravels.com (HR Manager). **Transitional:** it-intern@adansitravels.com (Admin) is also listed
+until step 2b is confirmed, then removed. Nobody else.
 
 The old `users` collection is **not** used by the new code and is deleted at the end of switch-over
 (step 6), not before — it is the fallback if the switch-over is rolled back.
@@ -162,8 +167,12 @@ catches it; the plan checks each write handler surfaces an error rather than fai
 ## Switch-over (order matters — nobody gets locked out halfway)
 
 1. **Deploy the new app** (merge + the user runs it / hosts it). Old rules still allow everything.
-2. **Seed `members`**: an admin (it-intern) opens the Users page and adds the three people. (The new Users
-   page writes `members`; the old rules still allow it.)
+2. **Seed `members`**: the user opens the Users page and adds eobeng@, mannan@, hr@ and (transitionally)
+   it-intern@. (The new Users page writes `members`; the old rules still allow it.)
+   **2b. Refresh the user's own Auth record:** Firebase console → Authentication → Users → delete the
+   `it-intern@adansitravels.com` account, then sign in with Google again. Firebase creates a new record whose
+   email is `eobeng@adansitravels.com`. Confirm the app lets you in, then remove it-intern@ from `members`.
+   Nothing is lost: roles live in `members`, keyed by email, not by uid.
 3. **Publish `firestore.rules`** in the console. Test with the Rules Playground checklist below before
    publishing.
 4. **Firebase console → Authentication → Settings → User actions:** untick **Enable create (sign-up)**.
@@ -189,7 +198,7 @@ catches it; the plan checks each write handler surfaces an error rather than fai
   - anyone writes `toners` → denied
   - member reads an unlisted collection → denied
   - email case: token `IT-Intern@…` matches doc `it-intern@…`
-- **App:** tsc, eslint, build, full suite. A live check after switch-over: it-intern, hr and mannan can sign
+- **App:** tsc, eslint, build, full suite. A live check after switch-over: eobeng, hr and mannan can sign
   in; a non-member Google account is refused with the message.
 
 ## Out of scope
