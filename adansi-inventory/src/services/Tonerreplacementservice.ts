@@ -20,12 +20,12 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
-import type { Toner, TonerReplacement } from "../types/toner";
+import type { TonerReplacement } from "../types/toner";
 import type { Printer, TonerLevel, TonerColor } from "../types/printer";
-import { normalize, printerIdentity, tonerIdentity } from "../toners/stockMatching";
+import { normalizeType, findPool } from "../toners/pools";
+import { TONER_STOCK_COLLECTION } from "./tonerStockService";
 
 const REPLACEMENTS_COLLECTION = "toner_replacements";
-const TONERS_COLLECTION = "toners";
 const PRINTERS_COLLECTION = "printers";
 
 export class TonerStockError extends Error {
@@ -61,31 +61,29 @@ export async function replacePrinterToner(
 ): Promise<void> {
   // PIXMA printers use one combined colour cartridge. The printer-level UI
   // historically represents it as Yellow, while inventory stores it as Color.
-  const stockColor = normalize(printer.model).includes("pixma") && normalize(color) !== "black"
+  const stockColor = normalizeType(printer.model).includes("pixma") && normalizeType(color) !== "black"
     ? "Color"
     : color;
-  const tonerSnapshot = await getDocs(collection(db, TONERS_COLLECTION));
-  // Same comparison the Toners page reports as linked, so a row that looks
-  // healthy there is a row a replacement can actually find.
-  const wantedPrinter = printerIdentity(printer);
-  const matches = tonerSnapshot.docs.filter((tonerDoc) => {
-    const toner = tonerDoc.data() as Toner;
-    return tonerIdentity(toner) === wantedPrinter
-      && normalize(toner.colorType) === normalize(stockColor);
-  });
 
-  if (matches.length === 0) {
-    throw new TonerStockError(
-      `No ${stockColor} toner stock was found for ${printer.model} at ${printer.location}${printer.room ? ` (${printer.room})` : ""}. Add the stock on the Toners page first.`
-    );
+  if (!printer.tonerType) {
+    throw new TonerStockError("Set the toner type on this printer before replacing a cartridge.");
   }
-  if (matches.length > 1) {
+
+  const stockSnapshot = await getDocs(collection(db, TONER_STOCK_COLLECTION));
+  const pools = stockSnapshot.docs.map((d) => ({
+    id: d.id,
+    ref: d.ref,
+    ...(d.data() as { tonerType: string; colorType: string; quantity: number }),
+  }));
+
+  const pool = findPool(pools, printer.tonerType, stockColor);
+  if (!pool) {
     throw new TonerStockError(
-      `More than one ${stockColor} stock record matches this printer. Please combine or remove the duplicate records on the Toners page first.`
+      `No ${printer.tonerType} ${stockColor} in stock. Add it on the Toners page.`
     );
   }
 
-  const stockRef = matches[0].ref;
+  const stockRef = pool.ref;
   const printerRef = doc(db, PRINTERS_COLLECTION, printer.id);
   const replacementRef = doc(collection(db, REPLACEMENTS_COLLECTION));
 
@@ -110,7 +108,7 @@ export async function replacePrinterToner(
 
     const currentPrinter = printerSnapshot.data() as Omit<Printer, "id">;
     const updatedTonerLevels = [...(currentPrinter.tonerLevels ?? [])];
-    const existingIndex = updatedTonerLevels.findIndex((level) => normalize(level.color) === normalize(color));
+    const existingIndex = updatedTonerLevels.findIndex((level) => normalizeType(level.color) === normalizeType(color));
     const newLevel: TonerLevel = {
       color: color as TonerColor,
       currentPercentage: replacement.currentPercentage,
@@ -131,6 +129,7 @@ export async function replacePrinterToner(
       ...(printer.room ? { room: printer.room } : {}),
       printerType: printer.model,
       colorType: stockColor,
+      tonerType: printer.tonerType,
       ...replacement,
       createdAt: new Date().toISOString(),
     });

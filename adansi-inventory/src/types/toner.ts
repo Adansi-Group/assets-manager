@@ -30,6 +30,7 @@ export interface TonerReplacement {
   location: string;
   room?: string; // NEW: Room/office field
   printerType: string;
+  tonerType?: string;
   colorType: string;
   dateChecked: string;
   dateReplaced: string;
