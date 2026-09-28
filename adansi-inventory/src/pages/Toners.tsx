@@ -14,6 +14,7 @@ import type { TonerStock } from "../types/toner";
 import { lowToners } from "../toners/stockLevel";
 import { findPool, normalizeType, printersUsing } from "../toners/pools";
 import { deliveryProblem } from "../toners/deliveries";
+import { canonicalColour, TONER_COLOURS, withCanonicalColour } from "../toners/colours";
 import {
   findPoolCollisions,
   groupPools,
@@ -34,11 +35,6 @@ import { recordTonerDelivery } from "../services/tonerDeliveryService";
 import { getAllTonerTypes } from "../services/tonerService";
 import Swal from "sweetalert2";
 import { AlertTriangle, Download, ChevronDown, Unlink } from "lucide-react";
-
-// The colours a cartridge can be filed under. Matches the Add Toner form's
-// own option list, since a pool's colour has to be one of those values to be
-// reachable from that form.
-const ALL_COLOR_OPTIONS = ["Black", "Cyan", "Magenta", "Yellow", "Black PIXMA", "Color PIXMA"];
 
 /** Cartridge names are typed by people; keep them out of the Swal markup's way. */
 const escapeHtml = (value: string) =>
@@ -153,7 +149,7 @@ export default function Toners() {
     // up twice under two spellings.
     const seen = new Set<string>();
     const colours: string[] = [];
-    for (const label of [...ALL_COLOR_OPTIONS, ...Object.values(row.colors).map((p) => p.colorType)]) {
+    for (const label of [...TONER_COLOURS, ...Object.values(row.colors).map((p) => p.colorType)]) {
       const key = normalizeType(label);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -237,7 +233,10 @@ export default function Toners() {
   // The modal awaits this and shows any failure (including addTonerStock's
   // duplicate-pool error) itself, so this stays a plain write with no
   // try/catch of its own.
-  async function handleSave(pool: Omit<TonerStock, "id">): Promise<boolean> {
+  async function handleSave(input: Omit<TonerStock, "id">): Promise<boolean> {
+    // "Color PIXMA" is filed as Color, so the duplicate check below and the
+    // write both see the pool the replacement actually uses.
+    const pool = withCanonicalColour(input);
     if (editing) {
       await updateTonerStock({ ...pool, id: editing.id });
     } else if (pool.quantity > 0) {
@@ -326,7 +325,7 @@ export default function Toners() {
             <label for="delivery-colour" ${label}>Colour</label>
             <select id="delivery-colour" class="swal2-select" style="${field}">
               <option value="">Select colour</option>
-              ${ALL_COLOR_OPTIONS.map((c) => `<option value="${c}">${c}</option>`).join("")}
+              ${TONER_COLOURS.map((c) => `<option value="${c}">${c}</option>`).join("")}
             </select>
           </div>
           <div>
@@ -372,7 +371,13 @@ export default function Toners() {
           return refuse("Cost per unit must be 0 or more, or left blank.");
         }
 
-        const delivery = { tonerType, colorType, quantity, dateReceived, costPerUnit };
+        const delivery = {
+          tonerType,
+          colorType: canonicalColour(colorType),
+          quantity,
+          dateReceived,
+          costPerUnit,
+        };
         const problem = deliveryProblem(today(), delivery);
         if (problem) return refuse(problem);
         return delivery;
@@ -405,7 +410,7 @@ export default function Toners() {
   }
 
   async function handleQuantityUpdate(row: CartridgeRow) {
-    const color = row.selectedColor;
+    const color = canonicalColour(row.selectedColor);
     const existingPool = selectedPool(row);
     const currentQty = existingPool?.quantity ?? 0;
 

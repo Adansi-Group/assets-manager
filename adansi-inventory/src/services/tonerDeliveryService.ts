@@ -10,8 +10,12 @@
 import { collection, doc, getDocs, runTransaction } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import type { TonerDelivery } from "../types/toner";
-import { findPool } from "../toners/pools";
-import { deliveryProblem, planDelivery, type DeliveryInput } from "../toners/deliveries";
+import {
+  deliveryPool,
+  deliveryProblem,
+  planDelivery,
+  type DeliveryInput,
+} from "../toners/deliveries";
 import { TONER_STOCK_COLLECTION } from "./tonerStockService";
 
 export const TONER_DELIVERIES_COLLECTION = "toner_deliveries";
@@ -51,7 +55,7 @@ export async function recordTonerDelivery(input: DeliveryInput): Promise<void> {
     ref: d.ref,
     ...(d.data() as { tonerType: string; colorType: string }),
   }));
-  const existing = findPool(pools, input.tonerType, input.colorType);
+  const existing = deliveryPool(pools, input);
 
   const poolRef = existing?.ref ?? doc(collection(db, TONER_STOCK_COLLECTION));
   const deliveryRef = doc(collection(db, TONER_DELIVERIES_COLLECTION));

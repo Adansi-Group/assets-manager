@@ -11,6 +11,8 @@
 // Pure: no React, no Firestore.
 
 import type { TonerDelivery } from "../types/toner";
+import { findPool, type PoolLike } from "./pools";
+import { canonicalColour } from "./colours";
 
 export type DeliveryInput = Omit<TonerDelivery, "id">;
 
@@ -56,6 +58,18 @@ function defined<T extends Record<string, unknown>>(fields: T): Partial<T> {
   ) as Partial<T>;
 }
 
+/**
+ * The existing pool a delivery adds to, if any. The colour is made canonical
+ * first, so a "Color PIXMA" delivery lands in the live "Color" pool instead
+ * of opening a second one the replacement can never draw from.
+ */
+export function deliveryPool<P extends PoolLike>(
+  pools: P[],
+  input: Pick<DeliveryInput, "tonerType" | "colorType">
+): P | undefined {
+  return findPool(pools, input.tonerType, canonicalColour(input.colorType));
+}
+
 export type PoolWrite =
   | { kind: "increment"; fields: { quantity: number; lastCheckedDate: string } }
   | { kind: "create"; fields: Record<string, unknown> };
@@ -79,7 +93,7 @@ export function planDelivery(
   if (problem) throw new Error(problem);
 
   const tonerType = input.tonerType.trim();
-  const colorType = input.colorType.trim();
+  const colorType = canonicalColour(input.colorType.trim());
 
   const delivery = defined({
     tonerType,

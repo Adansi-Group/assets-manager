@@ -10,6 +10,7 @@ import { db } from "../firebase/firebase";
 import type { TonerStock } from "../types/toner";
 import { findPool } from "../toners/pools";
 import { tonerStatus } from "../toners/stockLevel";
+import { withCanonicalColour } from "../toners/colours";
 import { getTonerReorderLevel } from "./notificationService";
 
 export const TONER_STOCK_COLLECTION = "toner_stock";
@@ -36,7 +37,9 @@ export async function getTonerStock(): Promise<TonerStock[]> {
  * has one — two pools for the same cartridge would split the count silently,
  * which is the class of bug this whole change exists to remove.
  */
-export async function addTonerStock(pool: Omit<TonerStock, "id">): Promise<string> {
+export async function addTonerStock(input: Omit<TonerStock, "id">): Promise<string> {
+  // "Color PIXMA" and "Black PIXMA" are filed as Color and Black.
+  const pool = withCanonicalColour(input);
   const existing = await getTonerStock();
   if (findPool(existing, pool.tonerType, pool.colorType)) {
     throw new Error(
@@ -64,7 +67,8 @@ export async function addTonerStock(pool: Omit<TonerStock, "id">): Promise<strin
  * stays untouched, and the page has two records for what Firestore — and
  * every replacement — will treat as one pool.
  */
-export async function updateTonerStock(pool: TonerStock): Promise<void> {
+export async function updateTonerStock(input: TonerStock): Promise<void> {
+  const pool = withCanonicalColour(input);
   const { id, status: _status, ...data } = pool;
 
   const existing = await getTonerStock();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deliveryProblem, planDelivery } from "./deliveries";
+import { deliveryPool, deliveryProblem, planDelivery } from "./deliveries";
 
 const TODAY = "2026-09-28";
 
@@ -125,5 +125,31 @@ describe("planDelivery", () => {
 
   it("throws on an invalid delivery instead of writing it", () => {
     expect(() => planDelivery(TODAY, undefined, input({ quantity: 0 }))).toThrow(/whole number/);
+  });
+});
+
+describe("a PIXMA delivery entered with a legacy colour name", () => {
+  // The live pools, as the migration created them.
+  const pools = [
+    { id: "pixma-black", tonerType: "PIXMA 446", colorType: "Black" },
+    { id: "pixma-color", tonerType: "PIXMA 446", colorType: "Color" },
+    { id: "pixma-cyan", tonerType: "PIXMA 446", colorType: "Cyan" },
+  ];
+
+  it("adds a 'Color PIXMA' delivery to the live Color pool", () => {
+    const pixma = input({ tonerType: "PIXMA 446", colorType: "Color PIXMA" });
+    expect(deliveryPool(pools, pixma)?.id).toBe("pixma-color");
+  });
+
+  it("adds a ' black  pixma ' delivery to the live Black pool", () => {
+    const pixma = input({ tonerType: "pixma 446", colorType: " black  pixma " });
+    expect(deliveryPool(pools, pixma)?.id).toBe("pixma-black");
+  });
+
+  it("records the delivery, and any new pool, under the canonical colour", () => {
+    const plan = planDelivery(TODAY, undefined, input({ tonerType: "PIXMA 446", colorType: "Color PIXMA" }));
+    expect(plan.delivery.colorType).toBe("Color");
+    expect(plan.pool.kind).toBe("create");
+    if (plan.pool.kind === "create") expect(plan.pool.fields.colorType).toBe("Color");
   });
 });

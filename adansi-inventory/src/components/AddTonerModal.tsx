@@ -12,6 +12,7 @@ import { X, Plus } from "lucide-react";
 import Swal from "sweetalert2";
 import type { TonerStock } from "../types/toner";
 import { getAllTonerTypes, addTonerType } from "../services/tonerService";
+import { optionsKeeping, TONER_COLOURS } from "../toners/colours";
 
 type Props = {
   onClose: () => void;
@@ -196,7 +197,7 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
                     <option value="">
                       {loadingTypes ? "Loading..." : "Select toner type"}
                     </option>
-                    {tonerTypes.map((type) => (
+                    {optionsKeeping(tonerTypes, tonerType).map((type) => (
                       <option key={type} value={type}>
                         {type}
                       </option>
@@ -228,12 +229,13 @@ export default function AddTonerModal({ onClose, onSave, existing }: Props) {
                   required
                 >
                   <option value="">Select color</option>
-                  <option>Black</option>
-                  <option>Black PIXMA</option>
-                  <option>Cyan</option>
-                  <option>Magenta</option>
-                  <option>Yellow</option>
-                  <option>Color PIXMA</option>
+                  {/* One list for every screen; a PIXMA uses Black and Color.
+                      A saved colour outside the list is kept, not blanked. */}
+                  {optionsKeeping(TONER_COLOURS, colorType).map((colour) => (
+                    <option key={colour} value={colour}>
+                      {colour}
+                    </option>
+                  ))}
                 </select>
               </div>
 
