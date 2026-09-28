@@ -59,3 +59,20 @@ export interface TonerStock {
   /** Derived on read, never trusted from storage. */
   status?: "Good" | "Warning" | "Critical";
 }
+
+/**
+ * Cartridges received into the central store on a given day.
+ *
+ * Pooling turned a delivery into a quantity increase on an existing pool —
+ * no new record and no date — so without this nothing could say what arrived
+ * in a month. Written alongside the pool increment, in one transaction.
+ */
+export interface TonerDelivery {
+  id: string;
+  tonerType: string;
+  colorType: string;
+  quantity: number;
+  /** YYYY-MM-DD */
+  dateReceived: string;
+  costPerUnit?: number;
+}

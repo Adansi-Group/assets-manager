@@ -29,6 +29,8 @@ import {
   updateTonerStock,
   deleteTonerStock,
 } from "../services/tonerStockService";
+import { recordTonerDelivery } from "../services/tonerDeliveryService";
+import { getAllTonerTypes } from "../services/tonerService";
 import Swal from "sweetalert2";
 import { AlertTriangle, Download, ChevronDown, Unlink } from "lucide-react";
 
@@ -36,6 +38,12 @@ import { AlertTriangle, Download, ChevronDown, Unlink } from "lucide-react";
 // own option list, since a pool's colour has to be one of those values to be
 // reachable from that form.
 const ALL_COLOR_OPTIONS = ["Black", "Cyan", "Magenta", "Yellow", "Black PIXMA", "Color PIXMA"];
+
+/** Cartridge names are typed by people; keep them out of the Swal markup's way. */
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+const today = () => new Date().toISOString().split("T")[0];
 
 export default function Toners() {
   const [pools, setPools] = useState<TonerStock[]>([]);
@@ -179,6 +187,133 @@ export default function Toners() {
     await loadStock();
     setEditing(null);
     navigate("/toners");
+  }
+
+  /**
+   * Record a DELIVERY: cartridges that arrived, with the date. Adds to the
+   * pool (or creates it) and leaves a dated record the monthly report reads.
+   * Correcting a miscount is the quantity click-to-edit, not this.
+   */
+  async function handleAddStock() {
+    let cartridgeTypes: string[];
+    try {
+      cartridgeTypes = await getAllTonerTypes();
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "Could not load cartridge types",
+        text: error instanceof Error ? error.message : "Failed to load cartridge types",
+      });
+      return;
+    }
+
+    // The saved cartridge types, plus any pool's own name, once each.
+    const seen = new Set<string>();
+    const cartridges: string[] = [];
+    for (const name of [...cartridgeTypes, ...pools.map((p) => p.tonerType)]) {
+      const key = normalizeType(name);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      cartridges.push(name.trim());
+    }
+
+    const field = "margin: 0; width: 100%;";
+    const label = 'class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"';
+
+    const result = await Swal.fire({
+      title: "Record a toner delivery",
+      html: `
+        <div class="text-left space-y-3">
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            Cartridges that arrived. They are added to the stock and dated for the monthly report.
+            To correct a miscount instead, click the quantity in the table.
+          </p>
+          <div>
+            <label for="delivery-cartridge" ${label}>Cartridge</label>
+            <select id="delivery-cartridge" class="swal2-select" style="${field}">
+              <option value="">Select cartridge</option>
+              ${cartridges
+                .map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)
+                .join("")}
+            </select>
+          </div>
+          <div>
+            <label for="delivery-colour" ${label}>Colour</label>
+            <select id="delivery-colour" class="swal2-select" style="${field}">
+              <option value="">Select colour</option>
+              ${ALL_COLOR_OPTIONS.map((c) => `<option value="${c}">${c}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <label for="delivery-quantity" ${label}>Quantity received</label>
+            <input id="delivery-quantity" type="number" min="1" step="1" value="1" class="swal2-input" style="${field}" />
+          </div>
+          <div>
+            <label for="delivery-date" ${label}>Date received</label>
+            <input id="delivery-date" type="date" value="${today()}" class="swal2-input" style="${field}" />
+          </div>
+          <div>
+            <label for="delivery-cost" ${label}>Cost per unit (GH₵, optional)</label>
+            <input id="delivery-cost" type="number" min="0" step="0.01" class="swal2-input" style="${field}" />
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Record delivery",
+      confirmButtonColor: "#16a34a",
+      preConfirm: () => {
+        const value = (id: string) =>
+          (document.getElementById(id) as HTMLInputElement | HTMLSelectElement).value.trim();
+        const refuse = (message: string) => {
+          Swal.showValidationMessage(message);
+          return false as const;
+        };
+
+        const tonerType = value("delivery-cartridge");
+        const colorType = value("delivery-colour");
+        const quantityText = value("delivery-quantity");
+        const dateReceived = value("delivery-date");
+        const costText = value("delivery-cost");
+
+        if (!tonerType) return refuse("Choose the cartridge that was delivered.");
+        if (!colorType) return refuse("Choose the colour that was delivered.");
+        const quantity = Number(quantityText);
+        if (!/^\d+$/.test(quantityText) || !Number.isInteger(quantity) || quantity < 1) {
+          return refuse("Quantity received must be a whole number of 1 or more.");
+        }
+        if (!dateReceived) return refuse("Enter the date the cartridges arrived.");
+        const costPerUnit = costText === "" ? undefined : Number(costText);
+        if (costPerUnit !== undefined && (!Number.isFinite(costPerUnit) || costPerUnit < 0)) {
+          return refuse("Cost per unit must be 0 or more, or left blank.");
+        }
+
+        return { tonerType, colorType, quantity, dateReceived, costPerUnit };
+      },
+    });
+
+    if (!result.isConfirmed || !result.value) return;
+    const delivery = result.value;
+
+    try {
+      await recordTonerDelivery(delivery);
+      await loadStock();
+      Swal.fire({
+        icon: "success",
+        title: "Delivery recorded",
+        text: `${delivery.quantity} ${delivery.colorType} ${delivery.tonerType} added to stock.`,
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      // Includes a Firestore permission error: the toner_deliveries rule has
+      // to be added in the Firebase console, and the message must say so
+      // rather than the save appearing to have worked.
+      Swal.fire({
+        icon: "error",
+        title: "Could not record the delivery",
+        text: error instanceof Error ? error.message : "Failed to record the delivery",
+      });
+    }
   }
 
   async function handleQuantityUpdate(row: CartridgeRow) {
@@ -547,8 +682,17 @@ export default function Toners() {
           </button>
 
           <button
-            onClick={() => navigate("/toners/add")}
+            onClick={handleAddStock}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+            title="Record cartridges that arrived, with the date received. To correct a miscount, click the quantity in the table."
+          >
+            Add stock
+          </button>
+
+          <button
+            onClick={() => navigate("/toners/add")}
+            className="border border-green-600 text-green-700 dark:text-green-400 px-4 py-2 rounded-lg hover:bg-green-50 dark:hover:bg-gray-700"
+            title="Create a stock record for a new cartridge and colour"
           >
             Add Toner
           </button>
@@ -597,7 +741,7 @@ export default function Toners() {
                     <button
                       onClick={() => handleQuantityUpdate(row)}
                       className="text-gray-900 dark:text-white font-bold text-lg hover:text-green-600 dark:hover:text-green-400 transition-colors"
-                      title="Click to update quantity"
+                      title="Click to correct the count (e.g. after a recount). Record deliveries with Add stock."
                     >
                       {displayedQty}
                       {displayedQty === 0 && (
