@@ -3,8 +3,10 @@ import {
   ShadingType, Table, TableCell, TableRow, TextRun, WidthType,
 } from "docx";
 import type { A4Sheet } from "../../types/A4Sheet";
-import type { Toner, TonerReplacement } from "../../types/toner";
+import type { TonerStock, TonerReplacement } from "../../types/toner";
+import type { Printer } from "../../types/printer";
 import { buildConsumablesModel } from "./model";
+import { printersUsing } from "../../toners/pools";
 
 const green = "16A34A";
 const cell = (text: string | number, header = false) => new TableCell({
@@ -19,8 +21,8 @@ const table = (headers: string[], rows: (string | number)[][]) => new Table({
 });
 const heading = (text: string) => new Paragraph({ text, heading: HeadingLevel.HEADING_1, spacing: { before: 300, after: 140 } });
 
-export async function downloadConsumablesDocx(toners: Toner[], replacements: TonerReplacement[], sheets: A4Sheet[]) {
-  const m = buildConsumablesModel(toners, replacements, sheets);
+export async function downloadConsumablesDocx(toners: TonerStock[], replacements: TonerReplacement[], sheets: A4Sheet[], printers: Printer[]) {
+  const m = buildConsumablesModel(toners, replacements, sheets, printers);
   const today = new Date().toISOString().slice(0, 10);
   const document = new Document({
     styles: { default: { document: { run: { font: "Aptos", size: 22 } } } },
@@ -37,7 +39,13 @@ export async function downloadConsumablesDocx(toners: Toner[], replacements: Ton
       heading("Management Recommendations"),
       ...m.recommendations.map(r => new Paragraph({ bullet:{level:0}, children:[new TextRun({text:`${r.priority}: `,bold:true}),new TextRun(r.text)] })),
       heading("Toner Stock Detail"),
-      table(["Location", "Office", "Printer", "Toner", "Colour", "Left", "Status"], toners.map(t => [t.location, t.room ?? "—", t.printerType, t.tonerType, t.colorType, t.quantity, t.status ?? "Not set"])),
+      table(["Cartridge", "Colour", "Left", "Status", "Used by"], toners.map(t => {
+        const usedBy = printersUsing(printers, t.tonerType);
+        const offices = usedBy.length
+          ? usedBy.map(p => `${p.location}${p.room ? ` (${p.room})` : ""}`).join(", ")
+          : "No printers assigned";
+        return [t.tonerType, t.colorType, t.quantity, t.status ?? "Not set", offices];
+      })),
       heading("A4 Stock and Consumption"),
       table(["Office", "Brand", "Initial", "Used", "Left", "Monthly use", "Days left", "Status"], sheets.map(s => [s.officeName, s.brand, s.initialQuantity, Math.max(0,s.initialQuantity-s.currentQuantity), s.currentQuantity, s.averageMonthlyUsage ?? "N/A", s.estimatedDaysRemaining ?? "N/A", s.status])),
       heading("Data Notes"),
