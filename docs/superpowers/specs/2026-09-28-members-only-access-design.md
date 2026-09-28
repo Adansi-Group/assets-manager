@@ -166,9 +166,10 @@ catches it; the plan checks each write handler surfaces an error rather than fai
 
 ## Switch-over (order matters — nobody gets locked out halfway)
 
-1. **Deploy the new app** (merge + the user runs it / hosts it). Old rules still allow everything.
-2. **Seed `members`**: the user opens the Users page and adds eobeng@, mannan@, hr@ and (transitionally)
-   it-intern@. (The new Users page writes `members`; the old rules still allow it.)
+1. **Seed `members` by hand in the Firebase console, before deploying** — the new app admits nobody
+   while `members` is empty, so the Users page can't create the first entries. Add eobeng@, mannan@, hr@
+   and (transitionally) it-intern@.
+2. **Deploy the new app.** Old rules still allow everything; you get in because you're on the list.
    **2b. Refresh the user's own Auth record:** Firebase console → Authentication → Users → delete the
    `it-intern@adansitravels.com` account, then sign in with Google again. Firebase creates a new record whose
    email is `eobeng@adansitravels.com`. Confirm the app lets you in, then remove it-intern@ from `members`.
