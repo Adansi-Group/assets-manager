@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Printer,
   Droplet,
@@ -22,7 +22,7 @@ import {
 } from "recharts";
 import { getPrinters } from "../services/printerService";
 import { getGadgets } from "../services/gadgetsService";
-import { getToners } from "../services/tonerService";
+import { getTonerStock } from "../services/tonerStockService";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
 import type { Gadget } from "../types/gadget";
@@ -30,6 +30,7 @@ import type { Gadget } from "../types/gadget";
 export default function Dashboard() {
   const [printerCount, setPrinterCount] = useState(0);
   const [tonerCount, setTonerCount] = useState(0);
+  const [tonerError, setTonerError] = useState<string | null>(null);
   const [a4SheetCount, setA4SheetCount] = useState(0);
   const [internetCount, setInternetCount] = useState(0);
   const [phonesCount, setPhonesCount] = useState(0);
@@ -44,105 +45,73 @@ export default function Dashboard() {
     faulty: 0,
   });
 
-  useEffect(() => {
-    loadData();
-
-    // Reload when window gains focus
-    const handleFocus = () => loadData();
-    window.addEventListener('focus', handleFocus);
-
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      console.log("🔄 Loading dashboard data from Firebase...");
+      try {
+        // Fetch all data from Firebase
+        const [printers, gadgets, a4Sheets, internetRecords] = await Promise.all([
+          getPrinters(),
+          getGadgets(),
+          getA4Sheets(),
+          getInternetUsage(),
+        ]);
 
-      // Fetch all data from Firebase
-      const [printers, gadgets, toners, a4Sheets, internetRecords] = await Promise.all([
-        getPrinters(),
-        getGadgets(),
-        getToners(),
-        getA4Sheets(),
-        getInternetUsage(),
-      ]);
+        // Set counts
+        setPrinterCount(printers.length);
+        setA4SheetCount(a4Sheets.length);
+        setInternetCount(internetRecords.length);
 
-      console.log("✅ Printers from Firebase:", printers.length);
-      console.log("✅ Gadgets from Firebase:", gadgets.length);
-      console.log("✅ Toners (individual color records) from Firebase:", toners.length);
-      console.log("✅ A4 Sheets from Firebase:", a4Sheets.length);
-      console.log("✅ Internet Records from Firebase:", internetRecords.length);
+        // Count by device type
+        const phones = gadgets.filter(g => g.deviceType === "Smartphone").length;
+        const laptops = gadgets.filter(g => g.deviceType === "Laptop").length;
+        const accessories = gadgets.filter(g => g.deviceType === "Accessory").length;
 
-      // ============================================
-      // DEBUG: Show EVERY toner record
-      // ============================================
-      console.log("\n🔍 DEBUGGING TONERS - ALL RECORDS:");
-      console.log("=".repeat(80));
-      
-      let totalQty = 0;
-      const groupedByLocation: Record<string, Array<{color: string, qty: number}>> = {};
-      
-      toners.forEach((t, index) => {
-        const key = `${t.location} - ${t.room || 'N/A'} - ${t.printerType}`;
-        if (!groupedByLocation[key]) {
-          groupedByLocation[key] = [];
-        }
-        groupedByLocation[key].push({ color: t.colorType, qty: t.quantity });
-        totalQty += t.quantity;
-        
-        console.log(`${index + 1}. ${t.location} | ${t.room || 'N/A'} | ${t.printerType} | ${t.tonerType} | ${t.colorType} → Qty: ${t.quantity}`);
-      });
+        setPhonesCount(phones);
+        setLaptopsCount(laptops);
+        setAccessoriesCount(accessories);
 
-      console.log("=".repeat(80));
-      console.log("\n📊 GROUPED BY LOCATION:");
-      Object.entries(groupedByLocation).forEach(([location, colors]) => {
-        const locationTotal = colors.reduce((sum, c) => sum + c.qty, 0);
-        console.log(`\n📍 ${location}:`);
-        colors.forEach(c => {
-          console.log(`   ${c.color}: ${c.qty}`);
-        });
-        console.log(`   ✅ Subtotal: ${locationTotal}`);
-      });
-      
-      console.log("\n" + "=".repeat(80));
-      console.log(`🎯 GRAND TOTAL: ${totalQty}`);
-      console.log("=".repeat(80));
+        // Get recent gadgets (last 5)
+        setRecentGadgets(gadgets.slice(0, 5)); // Already ordered by createdAt desc from service
 
-      // Set counts
-      setPrinterCount(printers.length);
-      setTonerCount(totalQty); // Sum of ALL toner quantities
-      setA4SheetCount(a4Sheets.length);
-      setInternetCount(internetRecords.length);
+        // Count by status
+        const inStock = gadgets.filter(g => g.status === "In-Stock").length;
+        const inUse = gadgets.filter(g => g.status === "In-Use").length;
+        const faulty = gadgets.filter(g => g.status === "Faulty").length;
 
-      // Count by device type
-      const phones = gadgets.filter(g => g.deviceType === "Smartphone").length;
-      const laptops = gadgets.filter(g => g.deviceType === "Laptop").length;
-      const accessories = gadgets.filter(g => g.deviceType === "Accessory").length;
-      
-      setPhonesCount(phones);
-      setLaptopsCount(laptops);
-      setAccessoriesCount(accessories);
+        setStatusSummary({ inStock, inUse, faulty });
+      } catch (error) {
+        console.error("Error loading dashboard data:", error);
+      }
 
-      console.log("📊 Device counts - Phones:", phones, "Laptops:", laptops, "Accessories:", accessories);
-
-      // Get recent gadgets (last 5)
-      setRecentGadgets(gadgets.slice(0, 5)); // Already ordered by createdAt desc from service
-
-      // Count by status
-      const inStock = gadgets.filter(g => g.status === "In-Stock").length;
-      const inUse = gadgets.filter(g => g.status === "In-Use").length;
-      const faulty = gadgets.filter(g => g.status === "Faulty").length;
-
-      setStatusSummary({ inStock, inUse, faulty });
-      console.log("📊 Status counts - In-Stock:", inStock, "In-Use:", inUse, "Faulty:", faulty);
-
-    } catch (error) {
-      console.error("❌ Error loading dashboard data:", error);
+      // Toner stock is read separately: getTonerStock() throws on a failed
+      // read, and a failure here must never be masked as "0 toners" — that
+      // reads as an empty store rather than a load that failed.
+      try {
+        const tonerStock = await getTonerStock();
+        setTonerCount(tonerStock.reduce((sum, t) => sum + (t.quantity ?? 0), 0));
+        setTonerError(null);
+      } catch (error) {
+        console.error("Error loading toner stock for dashboard:", error);
+        setTonerError(error instanceof Error ? error.message : "Could not load toner stock.");
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  // Reload when window gains focus. Kept as its own effect: the fetch it
+  // triggers happens inside the event callback, not synchronously in the
+  // effect body, which is how a subscription effect is meant to update state.
+  useEffect(() => {
+    const handleFocus = () => void loadData();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadData]);
 
   const stats = [
     {
@@ -155,11 +124,12 @@ export default function Dashboard() {
     },
     {
       label: "Toners",
-      value: tonerCount,
+      value: tonerError ? "Error" : tonerCount,
       icon: Droplet,
-      bg: "bg-purple-50 dark:bg-purple-900/20",
-      iconBg: "bg-purple-600",
-      textColor: "text-gray-900 dark:text-white",
+      bg: tonerError ? "bg-red-50 dark:bg-red-900/20" : "bg-purple-50 dark:bg-purple-900/20",
+      iconBg: tonerError ? "bg-red-600" : "bg-purple-600",
+      textColor: tonerError ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-white",
+      title: tonerError ?? undefined,
     },
     {
       label: "Internet",
@@ -251,6 +221,7 @@ export default function Dashboard() {
             <div
               key={s.label}
               className={`rounded-xl shadow p-6 ${s.bg} border border-gray-200 dark:border-gray-700`}
+              title={s.title}
             >
               <div className="flex justify-between items-center">
                 <div>

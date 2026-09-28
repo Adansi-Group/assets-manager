@@ -1,14 +1,15 @@
 
 
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Download, TrendingUp, AlertCircle, CheckCircle } from "lucide-react";
-import { getToners } from "../services/tonerService";
+import { getTonerStock } from "../services/tonerStockService";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
 
 export default function BudgetAnalysis() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [actualData, setActualData] = useState({
     toners: 0,
     a4Sheets: 0,
@@ -24,33 +25,41 @@ export default function BudgetAnalysis() {
     gadgets: 13000,
   });
 
-  async function loadData() {
-    // Load actual spending data
-    const [toners, sheets, internet] = await Promise.all([
-      getToners(),
-      getA4Sheets(),
-      getInternetUsage(),
-    ]);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Load actual spending data. A failed toner-stock read must not be
+      // turned into GH₵0 spent — that reads as "nothing was spent" rather
+      // than "we could not load stock" — so a failure here is surfaced
+      // instead of silently leaving the toner category at its prior value.
+      const [toners, sheets, internet] = await Promise.all([
+        getTonerStock(),
+        getA4Sheets(),
+        getInternetUsage(),
+      ]);
 
-    const tonerCost = toners.reduce((sum, t) => sum + (t.quantity * (t.costPerUnit || 0)), 0);
-    const sheetCost = sheets.reduce((sum, s) => sum + s.currentQuantity * s.costPerReam, 0);
-    const internetCost = internet.reduce((sum, i) => sum + (i.cost || 0), 0);
+      const tonerCost = toners.reduce((sum, t) => sum + (t.quantity * (t.costPerUnit || 0)), 0);
+      const sheetCost = sheets.reduce((sum, s) => sum + s.currentQuantity * s.costPerReam, 0);
+      const internetCost = internet.reduce((sum, i) => sum + (i.cost || 0), 0);
 
-    setActualData({
-      toners: tonerCost,
-      a4Sheets: sheetCost,
-      internet: internetCost,
-      gadgets: 8500, // Placeholder - update when gadget service is available
-    });
-
-    setLoading(false);
-  }
+      setActualData({
+        toners: tonerCost,
+        a4Sheets: sheetCost,
+        internet: internetCost,
+        gadgets: 8500, // Placeholder - update when gadget service is available
+      });
+      setError(null);
+    } catch (e) {
+      console.error("Error loading budget analysis data:", e);
+      setError(e instanceof Error ? e.message : "Could not load budget analysis data.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      await loadData();
-    })();
-  }, []);
+    void loadData();
+  }, [loadData]);
 
   const totalBudget = Object.values(budgetAllocations).reduce((sum, val) => sum + val, 0);
   const totalSpent = Object.values(actualData).reduce((sum, val) => sum + val, 0);
@@ -128,6 +137,26 @@ export default function BudgetAnalysis() {
     return (
       <div className="p-6 flex items-center justify-center h-96">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 space-y-6 bg-gray-100 dark:bg-gray-900">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-5 flex items-center gap-4">
+          <AlertCircle className="text-red-500 shrink-0" size={24} />
+          <div className="flex-1">
+            <p className="font-semibold text-gray-900 dark:text-white">Could not load budget analysis</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{error}</p>
+          </div>
+          <button
+            onClick={() => void loadData()}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
