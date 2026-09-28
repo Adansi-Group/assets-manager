@@ -1,59 +1,73 @@
-
-
-
-
-
-
-
 import type { ReactNode } from "react";
-import { useState, useEffect } from "react";
-import { Download, Layers, Printer, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Download, Layers, Printer as PrinterIcon, TriangleAlert } from "lucide-react";
 import Swal from "sweetalert2";
-import { getToners } from "../services/tonerService";
-import type { Toner } from "../types/toner";
+import { getTonerStock } from "../services/tonerStockService";
+import { getPrintersStrict } from "../services/printerService";
+import type { TonerStock } from "../types/toner";
+import type { Printer } from "../types/printer";
+import { printersUsing } from "../toners/pools";
+import { usedByLabel } from "../toners/poolRows";
 import ExportDropdown from "../components/ExportDropdown";
 import { DocBuilder } from "../reports/shared/pdf/docBuilder";
 
 export default function TonerReports() {
-  const [toners, setToners] = useState<Toner[]>([]);
+  const [toners, setToners] = useState<TonerStock[]>([]);
+  const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
-    const data = await getToners();
-    setToners(data);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    (async () => {
-      await loadData();
-    })();
+    setError(null);
+    try {
+      const [stock, printerList] = await Promise.all([
+        getTonerStock(),
+        getPrintersStrict(),
+      ]);
+      setToners(stock);
+      setPrinters(printerList);
+    } catch (e) {
+      // A failed stock or printers read must never render as an empty or
+      // zero report — that reads as "nothing in stock" rather than "we
+      // could not load the stock".
+      console.error("Error loading the toner report:", e);
+      setError(e instanceof Error ? e.message : "Could not load the toner report.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Note: `costPerUnit` and `estimatedDaysRemaining` exist on the Toner type but
-  // nothing in the app ever writes them, so a "total value" or "avg days
-  // remaining" here would always be exactly 0. Those are reported as not
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  // Note: `costPerUnit` and `estimatedDaysRemaining` exist on the TonerStock
+  // type but nothing in the app ever writes them, so a "total value" or "avg
+  // days remaining" here would always be exactly 0. Those are reported as not
   // recorded rather than shown as a figure.
   const stats = {
     totalToners: toners.length,
     totalUnits: toners.reduce((sum, t) => sum + (t.quantity ?? 0), 0),
     lowStock: toners.filter(t => t.status === "Warning" || t.status === "Critical").length,
-    locations: new Set(toners.map(t => t.location).filter(Boolean)).size,
+    printersServed: new Set(
+      toners.flatMap(t => printersUsing(printers, t.tonerType).map(p => p.id))
+    ).size,
   };
 
-  // Group by location
-  const byLocation: Record<string, { count: number; units: number; low: number }> = toners.reduce((acc, t) => {
-    if (!acc[t.location]) {
-      acc[t.location] = { count: 0, units: 0, low: 0 };
-    }
-    acc[t.location].count++;
-    acc[t.location].units += t.quantity ?? 0;
-    if (t.status === "Warning" || t.status === "Critical") {
-      acc[t.location].low++;
-    }
-    return acc;
-  }, {} as Record<string, { count: number; units: number; low: number }>);
+  // Group by cartridge
+  const byCartridge: Record<string, { count: number; units: number; low: number; usedBy: number }> =
+    toners.reduce((acc, t) => {
+      if (!acc[t.tonerType]) {
+        acc[t.tonerType] = { count: 0, units: 0, low: 0, usedBy: printersUsing(printers, t.tonerType).length };
+      }
+      acc[t.tonerType].count++;
+      acc[t.tonerType].units += t.quantity ?? 0;
+      if (t.status === "Warning" || t.status === "Critical") {
+        acc[t.tonerType].low++;
+      }
+      return acc;
+    }, {} as Record<string, { count: number; units: number; low: number; usedBy: number }>);
 
   // Group by color
   const byColor: Record<string, { count: number; quantity: number }> = toners.reduce((acc, t) => {
@@ -65,29 +79,34 @@ export default function TonerReports() {
     return acc;
   }, {} as Record<string, { count: number; quantity: number }>);
 
+  const exportRows = toners.map(t => ({
+    ...t,
+    usedBy: usedByLabel(printersUsing(printers, t.tonerType).length),
+  }));
+
   function exportPDF() {
     try {
       const today = new Date().toISOString().slice(0, 10);
       const doc = new DocBuilder({
         title: "Toner Stock Report",
-        subtitle: `Adansi Travels · All locations · Generated ${today}`,
+        subtitle: `Adansi Travels · All cartridges · Generated ${today}`,
         footerNote: "Adansi Travels · Assets Station",
       });
 
       doc.heading(2, "Summary");
       doc.paragraph(
-        `${stats.totalToners} toner ${stats.totalToners === 1 ? "record" : "records"} covering ` +
-          `${stats.totalUnits} ${stats.totalUnits === 1 ? "unit" : "units"} across ` +
-          `${stats.locations} ${stats.locations === 1 ? "location" : "locations"}. ` +
-          `${stats.lowStock} ${stats.lowStock === 1 ? "record is" : "records are"} at warning or critical level.`
+        `${stats.totalToners} cartridge ${stats.totalToners === 1 ? "pool" : "pools"} covering ` +
+          `${stats.totalUnits} ${stats.totalUnits === 1 ? "unit" : "units"}, feeding ` +
+          `${stats.printersServed} ${stats.printersServed === 1 ? "printer" : "printers"}. ` +
+          `${stats.lowStock} ${stats.lowStock === 1 ? "pool is" : "pools are"} at warning or critical level.`
       );
 
-      doc.heading(2, "Stock by Location");
+      doc.heading(2, "Stock by Cartridge");
       doc.table(
-        ["Location", "Records", "Units", "Low stock"],
-        Object.entries(byLocation)
+        ["Cartridge", "Colours stocked", "Units", "Used by", "Low stock"],
+        Object.entries(byCartridge)
           .sort((a, b) => b[1].units - a[1].units)
-          .map(([location, d]) => [location, d.count, d.units, d.low])
+          .map(([tonerType, d]) => [tonerType, d.count, d.units, usedByLabel(d.usedBy), d.low])
       );
 
       doc.heading(2, "Stock by Colour");
@@ -100,14 +119,12 @@ export default function TonerReports() {
 
       doc.heading(2, "All Toner Records");
       doc.table(
-        ["Location", "Room", "Printer", "Toner", "Colour", "Qty", "Status"],
+        ["Cartridge", "Colour", "Qty", "Used by", "Status"],
         toners.map(t => [
-          t.location ?? "—",
-          t.room ?? "—",
-          t.printerType ?? "—",
           t.tonerType ?? "—",
           t.colorType ?? "—",
           t.quantity ?? 0,
+          usedByLabel(printersUsing(printers, t.tonerType).length),
           t.status ?? "Not set",
         ])
       );
@@ -146,6 +163,26 @@ export default function TonerReports() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="p-6 space-y-6 bg-gray-100 dark:bg-gray-900">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-5 flex items-center gap-4">
+          <TriangleAlert className="text-red-500 shrink-0" size={24} />
+          <div className="flex-1">
+            <p className="font-semibold text-gray-900 dark:text-white">Could not load the toner report</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{error}</p>
+          </div>
+          <button
+            onClick={() => void loadData()}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6 bg-gray-100 dark:bg-gray-900">
       {/* Header */}
@@ -155,23 +192,21 @@ export default function TonerReports() {
             Toner Reports
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Stock levels by location and colour
+            Stock levels by cartridge and colour
           </p>
         </div>
 
         <div className="flex gap-3">
           <ExportDropdown
-            data={toners as unknown as Record<string, unknown>[]}
+            data={exportRows as unknown as Record<string, unknown>[]}
             filename={`toners-${new Date().toISOString().slice(0, 10)}`}
             columns={[
-              { key: "location", label: "Location" },
-              { key: "room", label: "Room" },
-              { key: "printerType", label: "Printer" },
-              { key: "tonerType", label: "Toner" },
+              { key: "tonerType", label: "Cartridge" },
               { key: "colorType", label: "Colour" },
               { key: "quantity", label: "Quantity" },
               { key: "initialQuantity", label: "Initial Quantity" },
               { key: "dateBrought", label: "Date Brought" },
+              { key: "usedBy", label: "Used by" },
               { key: "status", label: "Status" },
             ]}
           />
@@ -191,7 +226,7 @@ export default function TonerReports() {
         <StatCard
           title="Total Toners"
           value={stats.totalToners}
-          icon={<Printer />}
+          icon={<PrinterIcon />}
           color="text-blue-600"
         />
         <StatCard
@@ -207,9 +242,9 @@ export default function TonerReports() {
           color="text-red-600"
         />
         <StatCard
-          title="Locations"
-          value={stats.locations}
-          icon={<Printer />}
+          title="Printers Served"
+          value={stats.printersServed}
+          icon={<PrinterIcon />}
           color="text-purple-600"
         />
       </div>
@@ -227,20 +262,20 @@ export default function TonerReports() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* By Location */}
+        {/* By Cartridge */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
-            Toners by Location
+            Toners by Cartridge
           </h2>
           <div className="space-y-4">
-            {Object.entries(byLocation).map(([location, data]) => (
-              <div key={location}>
+            {Object.entries(byCartridge).map(([tonerType, data]) => (
+              <div key={tonerType}>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {location}
+                    {tonerType}
                   </span>
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {data.count} toners
+                    {usedByLabel(data.usedBy)}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
@@ -321,7 +356,7 @@ export default function TonerReports() {
               <tr>
                 {/* No "Days Left": estimatedDaysRemaining is never written, so
                     the column could only ever print N/A on every row. */}
-                {["Location", "Printer", "Toner", "Color", "Quantity", "Status"].map(
+                {["Cartridge", "Color", "Quantity", "Used by", "Status"].map(
                   (h) => (
                     <th
                       key={h}
@@ -336,12 +371,6 @@ export default function TonerReports() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {toners.map((t) => (
                 <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                    {t.location}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                    {t.printerType}
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
                     {t.tonerType}
                   </td>
@@ -362,6 +391,9 @@ export default function TonerReports() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
                     {t.quantity}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+                    {usedByLabel(printersUsing(printers, t.tonerType).length)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <span
