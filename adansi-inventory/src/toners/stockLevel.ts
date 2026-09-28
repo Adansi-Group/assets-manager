@@ -58,7 +58,7 @@ export function isLowToner(toner: Pick<Toner, "quantity">, reorderLevel: number)
  * The order is the point: the banner should lead with what has actually run out
  * rather than whatever happens to sort first alphabetically.
  */
-export function lowToners<T extends Pick<Toner, "quantity" | "location">>(
+export function lowToners<T extends Pick<Toner, "quantity"> & { location?: string }>(
   toners: T[],
   reorderLevel: number
 ): T[] {

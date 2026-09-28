@@ -117,4 +117,11 @@ describe("lowToners", () => {
   it("returns nothing when everything is well stocked", () => {
     expect(lowToners([toner({ id: "a", quantity: 20 })], 3)).toEqual([]);
   });
+
+  it("accepts objects with no location at all, such as a pool", () => {
+    // TonerStock has no location field; lowToners must still work directly
+    // on it rather than forcing every caller to fabricate one.
+    const found = lowToners([{ quantity: 1 }, { quantity: 10 }], 3);
+    expect(found).toEqual([{ quantity: 1 }]);
+  });
 });

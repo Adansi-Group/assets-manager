@@ -11,8 +11,15 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import AddTonerModal from "../components/AddTonerModal";
 import type { TonerStock } from "../types/toner";
-import { lowToners, type TonerStockStatus } from "../toners/stockLevel";
+import { lowToners } from "../toners/stockLevel";
 import { normalizeType, printersUsing } from "../toners/pools";
+import {
+  findPoolCollisions,
+  groupPools,
+  selectedPool,
+  usedByLabel,
+  type CartridgeRow,
+} from "../toners/poolRows";
 import { getPrinters } from "../services/printerService";
 import type { Printer } from "../types/printer";
 import { getTonerReorderLevel } from "../services/notificationService";
@@ -29,56 +36,6 @@ import { AlertTriangle, Download, ChevronDown, Unlink } from "lucide-react";
 // own option list, since a pool's colour has to be one of those values to be
 // reachable from that form.
 const ALL_COLOR_OPTIONS = ["Black", "Cyan", "Magenta", "Yellow", "Black PIXMA", "Color PIXMA"];
-
-type CartridgeRow = {
-  key: string;
-  tonerType: string;
-  colors: Record<string, TonerStock>;
-  selectedColor: string;
-  usedBy: Printer[];
-  status?: TonerStockStatus;
-};
-
-/** One row per cartridge; the colour picker chooses among that cartridge's pools. */
-function groupPools(
-  pools: TonerStock[],
-  printers: Printer[],
-  selectedColors: Record<string, string>
-): CartridgeRow[] {
-  const groups: Record<string, CartridgeRow> = {};
-
-  pools.forEach((pool) => {
-    const key = normalizeType(pool.tonerType);
-
-    if (!groups[key]) {
-      groups[key] = {
-        key,
-        tonerType: pool.tonerType,
-        colors: {},
-        selectedColor: selectedColors[key] || pool.colorType,
-        usedBy: printersUsing(printers, pool.tonerType),
-      };
-    }
-
-    groups[key].colors[pool.colorType] = pool;
-
-    // Worst status across the set wins: a row is only calm when every
-    // colour in it is.
-    if (pool.status === "Critical") {
-      groups[key].status = "Critical";
-    } else if (pool.status === "Warning" && groups[key].status !== "Critical") {
-      groups[key].status = "Warning";
-    } else if (!groups[key].status) {
-      groups[key].status = pool.status;
-    }
-  });
-
-  return Object.values(groups);
-}
-
-function usedByLabel(n: number): string {
-  return n === 1 ? "1 printer" : `${n} printers`;
-}
 
 export default function Toners() {
   const [pools, setPools] = useState<TonerStock[]>([]);
@@ -123,7 +80,17 @@ export default function Toners() {
   }, []);
 
   async function handleColorSelect(row: CartridgeRow) {
-    const colours = Array.from(new Set([...ALL_COLOR_OPTIONS, ...Object.keys(row.colors)]));
+    // The fixed list, plus each existing pool's own (correctly-cased)
+    // colour name, deduplicated by normalized value so a pool never shows
+    // up twice under two spellings.
+    const seen = new Set<string>();
+    const colours: string[] = [];
+    for (const label of [...ALL_COLOR_OPTIONS, ...Object.values(row.colors).map((p) => p.colorType)]) {
+      const key = normalizeType(label);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      colours.push(label);
+    }
 
     await Swal.fire({
       title: "Select Color to View",
@@ -134,8 +101,8 @@ export default function Toners() {
           </p>
           ${colours
             .map((color) => {
-              const pool = row.colors[color];
-              const isSelected = color === row.selectedColor;
+              const pool = row.colors[normalizeType(color)];
+              const isSelected = normalizeType(color) === normalizeType(row.selectedColor);
 
               return `
                 <div class="p-3 border rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 ${isSelected ? "border-green-500 bg-green-50 dark:bg-green-900/20" : "border-gray-300 dark:border-gray-600"}"
@@ -216,7 +183,7 @@ export default function Toners() {
 
   async function handleQuantityUpdate(row: CartridgeRow) {
     const color = row.selectedColor;
-    const existingPool = row.colors[color];
+    const existingPool = selectedPool(row);
     const currentQty = existingPool?.quantity ?? 0;
 
     const result = await Swal.fire({
@@ -294,34 +261,47 @@ export default function Toners() {
     }
   }
 
-  async function handleRemoveRow(row: CartridgeRow) {
-    const colorCount = Object.keys(row.colors).length;
+  // Acts only on the colour the row is currently showing — deleting a whole
+  // cartridge's colours at once meant one confirm click could remove stock
+  // no one had actually chosen to look at.
+  async function handleDeleteColor(row: CartridgeRow) {
+    const pool = selectedPool(row);
+    if (!pool) return;
 
     const result = await Swal.fire({
-      title: "Delete All Colors?",
-      html: `This will delete <strong>${colorCount}</strong> color pool(s) for:<br><br>
-            <strong>${row.tonerType}</strong>`,
+      title: "Delete this colour pool?",
+      html: `This will delete <strong>${pool.colorType} ${pool.tonerType}</strong> —
+             ${pool.quantity} ${pool.quantity === 1 ? "cartridge" : "cartridges"},
+             shared by ${usedByLabel(row.usedBy.length)}.`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#dc2626",
       cancelButtonColor: "#6b7280",
-      confirmButtonText: "Yes, delete all",
+      confirmButtonText: "Yes, delete",
     });
 
-    if (result.isConfirmed) {
-      for (const pool of Object.values(row.colors)) {
-        await deleteTonerStock(pool.id);
-      }
+    if (!result.isConfirmed) return;
 
-      await loadStock();
+    try {
+      await deleteTonerStock(pool.id);
 
       Swal.fire({
         title: "Deleted!",
-        text: `${colorCount} toner color pool(s) deleted.`,
+        text: `${pool.colorType} ${pool.tonerType} deleted.`,
         icon: "success",
         timer: 1500,
         showConfirmButton: false,
       });
+    } catch (error) {
+      // A failed delete must not leave a stale table pretending the pool is
+      // gone, nor a silently rejected promise.
+      Swal.fire({
+        icon: "error",
+        title: "Could not delete",
+        text: error instanceof Error ? error.message : "Failed to delete toner stock",
+      });
+    } finally {
+      await loadStock();
     }
   }
 
@@ -357,22 +337,17 @@ export default function Toners() {
   );
 
   // Individual pools, not rows: a row is one cartridge's set of colours, and
-  // the reorder decision is per colour. `location` is stood in for by the
-  // cartridge + colour, since pools have no location of their own — it only
-  // exists here to give lowToners a stable tie-break for equal quantities.
-  const needsReorder =
-    reorderLevel === null
-      ? []
-      : lowToners(
-          pools.map((p) => ({ ...p, location: `${p.tonerType} ${p.colorType}` })),
-          reorderLevel
-        );
+  // the reorder decision is per colour.
+  const needsReorder = reorderLevel === null ? [] : lowToners(pools, reorderLevel);
 
-  // Printers that cannot be matched to any pool at all, and pools that no
-  // printer draws on — both invisible until someone tries a replacement or
-  // wonders why a cartridge never seems to move.
+  // Printers that cannot be matched to any pool at all, pools that no
+  // printer draws on, and pools that collide once case/spacing is
+  // normalized — all invisible until someone tries a replacement, wonders
+  // why a cartridge never seems to move, or finds two records for the same
+  // colour.
   const printersWithoutTonerType = printers.filter((p) => !normalizeType(p.tonerType));
   const unusedPools = pools.filter((p) => printersUsing(printers, p.tonerType).length === 0);
+  const collisions = findPoolCollisions(pools);
 
   const critical = groupedRows.filter((r) => r.status === "Critical").length;
   const warning = groupedRows.filter((r) => r.status === "Warning").length;
@@ -424,7 +399,7 @@ export default function Toners() {
         <Stat title="Critical" value={critical} color="text-red-600" />
       </div>
 
-      {(printersWithoutTonerType.length > 0 || unusedPools.length > 0) && (
+      {(printersWithoutTonerType.length > 0 || unusedPools.length > 0 || collisions.length > 0) && (
         <div
           role="alert"
           className="bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-500 rounded-r-lg p-5"
@@ -476,6 +451,37 @@ export default function Toners() {
                       >
                         {p.colorType} {p.tonerType} — {p.quantity}{" "}
                         {p.quantity === 1 ? "cartridge" : "cartridges"}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {collisions.length > 0 && (
+                <div>
+                  <p className="font-bold text-amber-800 dark:text-amber-300">
+                    {collisions.length} colour{collisions.length === 1 ? "" : "s"}{" "}
+                    {collisions.length === 1 ? "collides" : "collide"} after normalizing case or
+                    spacing
+                  </p>
+                  <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+                    These are separate stock records for what the app treats as one pool. Only one
+                    is shown on the row below — merge their quantities into a single record and
+                    delete the other.
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {collisions.map((group) => (
+                      <li
+                        key={group.map((p) => p.id).join("+")}
+                        className="text-sm bg-white/60 dark:bg-gray-900/40 rounded p-3 text-gray-900 dark:text-white"
+                      >
+                        <span className="font-medium">
+                          {group[0].colorType} {group[0].tonerType}
+                        </span>
+                        <span className="text-gray-600 dark:text-gray-400">
+                          {" "}
+                          &mdash; {group.map((p) => `${p.quantity} (id ${p.id})`).join(", ")}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -556,11 +562,10 @@ export default function Toners() {
             <tr>
               {[
                 "Cartridge",
-                "Color",
-                "Used by",
+                "Colour",
                 "Qty",
                 "Status",
-                "Recommendation",
+                "Used by",
                 "Date",
                 "Actions",
               ].map((h) => (
@@ -572,8 +577,8 @@ export default function Toners() {
           </thead>
           <tbody>
             {filtered.map((row) => {
-              const selectedPool = row.colors[row.selectedColor];
-              const displayedQty = selectedPool?.quantity ?? 0;
+              const activePool = selectedPool(row);
+              const displayedQty = activePool?.quantity ?? 0;
 
               return (
                 <tr key={row.key} className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -586,10 +591,6 @@ export default function Toners() {
                       color={row.selectedColor}
                       onClick={() => handleColorSelect(row)}
                     />
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <UsedByChip count={row.usedBy.length} onClick={() => handleUsedByClick(row)} />
                   </td>
 
                   <td className="px-4 py-3">
@@ -606,23 +607,21 @@ export default function Toners() {
                   </td>
 
                   <td className="px-4 py-3">
-                    <StatusBadge status={selectedPool?.status} />
+                    <StatusBadge status={activePool?.status} />
                   </td>
 
                   <td className="px-4 py-3">
-                    <RecommendationBadge
-                      percentage={selectedPool?.initialQuantity ? (displayedQty / selectedPool.initialQuantity) * 100 : 100}
-                    />
+                    <UsedByChip count={row.usedBy.length} onClick={() => handleUsedByClick(row)} />
                   </td>
 
                   <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                    {selectedPool?.dateBrought ?? "—"}
+                    {activePool?.dateBrought ?? "—"}
                   </td>
 
                   <td className="px-4 py-3 space-x-3 whitespace-nowrap">
                     <button
                       onClick={() => {
-                        const record = row.colors[row.selectedColor] ?? Object.values(row.colors)[0];
+                        const record = activePool ?? Object.values(row.colors)[0];
                         if (!record) return;
                         setEditing(record);
                         navigate("/toners/add");
@@ -631,12 +630,14 @@ export default function Toners() {
                     >
                       Edit
                     </button>
-                    <button
-                      onClick={() => handleRemoveRow(row)}
-                      className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                    >
-                      Delete
-                    </button>
+                    {activePool && (
+                      <button
+                        onClick={() => handleDeleteColor(row)}
+                        className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -644,7 +645,7 @@ export default function Toners() {
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-8 text-gray-400 dark:text-gray-500">
+                <td colSpan={7} className="text-center py-8 text-gray-400 dark:text-gray-500">
                   {search ? "No toners found" : "No toners yet. Add your first toner!"}
                 </td>
               </tr>
@@ -738,24 +739,3 @@ function UsedByChip({ count, onClick }: { count: number; onClick: () => void }) 
   );
 }
 
-function RecommendationBadge({ percentage }: { percentage: number }) {
-  if (percentage > 50) {
-    return (
-      <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-xs">
-        <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        No usage yet
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 text-xs">
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-      </svg>
-      Low stock
-    </div>
-  );
-}

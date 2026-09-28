@@ -56,8 +56,25 @@ export async function addTonerStock(pool: Omit<TonerStock, "id">): Promise<strin
   return ref.id;
 }
 
+/**
+ * Update a pool, refusing an edit that would collide with a DIFFERENT pool
+ * for the same cartridge and colour. Without this, changing a pool's toner
+ * type or colour to match one that already exists silently splits the
+ * count: the edited record keeps its id, the other pool it now duplicates
+ * stays untouched, and the page has two records for what Firestore — and
+ * every replacement — will treat as one pool.
+ */
 export async function updateTonerStock(pool: TonerStock): Promise<void> {
   const { id, status: _status, ...data } = pool;
+
+  const existing = await getTonerStock();
+  const collision = findPool(existing, pool.tonerType, pool.colorType);
+  if (collision && collision.id !== id) {
+    throw new Error(
+      `${pool.colorType} ${pool.tonerType} already has a stock record. Edit that one instead.`
+    );
+  }
+
   // Remove undefined fields (Firebase doesn't accept undefined values)
   const cleanData: Record<string, unknown> = {};
   Object.keys(data).forEach((key) => {
