@@ -3,9 +3,10 @@ import { buildStationReport, type StationInput } from "./model";
 import { narrateStation } from "./narrate";
 import { monthRange, resolveRange } from "../shared/period";
 import type { Block } from "../shared/blocks";
-import type { Toner, TonerReplacement } from "../../types/toner";
+import type { Toner, TonerReplacement, TonerStock } from "../../types/toner";
 import type { A4Sheet } from "../../types/A4Sheet";
 import type { Gadget } from "../../types/gadget";
+import type { Printer } from "../../types/printer";
 
 const AUGUST = monthRange(2026, 7);
 const ALL = resolveRange(2026, "ALL", "", "");
@@ -26,6 +27,28 @@ const toner = (over: Partial<Toner> & { id: string }): Toner =>
     dateBrought: "2026-01-01",
     ...over,
   }) as Toner;
+
+const pool = (over: Partial<TonerStock> & { id: string }): TonerStock =>
+  ({
+    tonerType: "415A",
+    colorType: "Black",
+    quantity: 3,
+    dateBrought: "2026-01-01",
+    ...over,
+  }) as TonerStock;
+
+const printer = (over: Partial<Printer> & { id: string }): Printer =>
+  ({
+    location: "Travel House",
+    model: "HP LaserJet",
+    tonerType: "415A",
+    printerColorType: "black",
+    quantity: 1,
+    accessories: [],
+    status: "Active",
+    date: "2026-01-01",
+    ...over,
+  }) as Printer;
 
 const replacement = (
   id: string,
@@ -76,6 +99,8 @@ function august(over: Partial<StationInput> = {}) {
   return narrateStation(
     buildStationReport({
       toners: [toner({ id: "t1" })],
+      stock: [pool({ id: "s1" })],
+      printers: [printer({ id: "p1" })],
       replacements: [replacement("r1", "2026-08-04"), replacement("r2", "2026-08-19")],
       sheets: [sheet({ id: "a1", lastRestocked: "2026-08-14" })],
       gadgets: [gadgetOn("g1", "2026-08-09")],
@@ -178,6 +203,8 @@ describe("narrateStation for a single month", () => {
       narrateStation(
         buildStationReport({
           toners: [toner({ id: "t1" })],
+          stock: [pool({ id: "s1" })],
+          printers: [printer({ id: "p1" })],
           replacements: [replacement("r1", "2026-03-04")],
           sheets: [sheet({ id: "a1", lastRestocked: "2026-02-14" })],
           gadgets: [gadgetOn("g1", "2026-01-09")],
@@ -196,6 +223,8 @@ describe("narrateStation for a single month", () => {
     const blocks = narrateStation(
       buildStationReport({
         toners: [],
+        stock: [],
+        printers: [],
         replacements: [],
         sheets: [],
         gadgets: [],

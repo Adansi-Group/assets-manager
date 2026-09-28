@@ -10,9 +10,10 @@
 // Pure data: no React, no Firestore, no jsPDF. narrateStation() turns it into
 // prose.
 
-import type { Toner, TonerReplacement } from "../../types/toner";
+import type { Toner, TonerReplacement, TonerStock } from "../../types/toner";
 import type { A4Sheet } from "../../types/A4Sheet";
 import type { Gadget } from "../../types/gadget";
+import type { Printer } from "../../types/printer";
 import { inRange, toISODate, type Range } from "../shared/period";
 import { joinList, verbHave } from "../shared/text";
 import { lowToners } from "../../toners/stockLevel";
@@ -30,24 +31,16 @@ const UNPRICED_CATEGORIES = ["Gadgets", "Toners"] as const;
 
 export type ConsumablesModel = ReturnType<typeof buildConsumablesModel>;
 
-export interface TonerLocation {
-  location: string;
-  /** Distinct stock records — a location can hold several cartridge types. */
-  lines: number;
-  units: number;
-}
-
 export interface TonerSection {
   unitsInStock: number;
-  /** Distinct stock records, which is not the same as cartridges on the shelf. */
+  /** Distinct pools — a cartridge and colour, not a printer or a branch. */
   lines: number;
   replacements: number;
   /** Null rather than 0 when there are too few replacements to measure a gap. */
   averageDaysBetween: number | null;
   durationSamples: number;
-  byLocation: TonerLocation[];
   byColour: Tally[];
-  low: Toner[];
+  low: TonerStock[];
 }
 
 export interface A4Office {
@@ -126,10 +119,20 @@ export interface StationReportModel {
 }
 
 export interface StationInput {
+  /**
+   * Legacy per-printer toner records. Stock levels moved to pooled `stock`;
+   * this is kept only for `tonersBroughtRecords`, the one figure that is a
+   * true dated history — new stock records brought in during a month — which
+   * pooling has no equivalent of yet.
+   */
   toners: Toner[];
+  /** Pooled cartridge stock: one record per cartridge and colour. */
+  stock: TonerStock[];
   replacements: TonerReplacement[];
   sheets: A4Sheet[];
   gadgets: Gadget[];
+  /** Which cartridge each printer takes, used to say how many printers a pool feeds. */
+  printers: Printer[];
   range: Range;
   /** Cartridges at or below this count need reordering. */
   reorderLevel: number;
@@ -193,34 +196,22 @@ function replacementIntervals(replacements: TonerReplacement[]): number[] {
 }
 
 function buildToners(
-  toners: Toner[],
+  stock: TonerStock[],
   replacements: TonerReplacement[],
   reorderLevel: number
 ): TonerSection {
   const intervals = replacementIntervals(replacements);
 
-  const byLocation = new Map<string, TonerLocation>();
-  for (const item of toners) {
-    const location = item.location?.trim() || "Unspecified location";
-    const row = byLocation.get(location) ?? { location, lines: 0, units: 0 };
-    row.lines += 1;
-    row.units += positive(item.quantity);
-    byLocation.set(location, row);
-  }
-
   return {
-    unitsInStock: toners.reduce((sum, t) => sum + positive(t.quantity), 0),
-    lines: toners.length,
+    unitsInStock: stock.reduce((sum, t) => sum + positive(t.quantity), 0),
+    lines: stock.length,
     replacements: replacements.length,
     averageDaysBetween: mean(intervals),
     durationSamples: intervals.length,
-    byLocation: [...byLocation.values()].sort(
-      (a, b) => b.units - a.units || a.location.localeCompare(b.location)
-    ),
-    byColour: tally(toners.map(t => t.colorType)),
+    byColour: tally(stock.map(t => t.colorType)),
     // The reorder level is the app's single definition of "low"; the report
     // must not carry a second, quieter one of its own.
-    low: lowToners(toners, reorderLevel),
+    low: lowToners(stock, reorderLevel),
   };
 }
 
@@ -361,7 +352,7 @@ function stationGaps(toners: TonerSection, a4: A4Section, activity: ActivitySect
 const ALL_TIME: Range = { start: "0000-01-01", end: "9999-12-31", label: "All time" };
 
 export function buildStationReport(input: StationInput): StationReportModel {
-  const toners = buildToners(input.toners, input.replacements, input.reorderLevel);
+  const toners = buildToners(input.stock, input.replacements, input.reorderLevel);
   const a4 = buildA4(input.sheets);
   const activity = buildActivity(input);
 
@@ -379,7 +370,7 @@ export function buildStationReport(input: StationInput): StationReportModel {
   return {
     meta: { generatedAt: input.generatedAt, periodLabel: input.range.label },
     gadgets,
-    consumables: buildConsumablesModel(input.toners, input.replacements, input.sheets),
+    consumables: buildConsumablesModel(input.stock, input.replacements, input.sheets, input.printers),
     toners,
     a4,
     activity,

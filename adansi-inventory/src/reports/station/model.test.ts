@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildStationReport } from "./model";
 import { monthRange, resolveRange } from "../shared/period";
-import type { Toner, TonerReplacement } from "../../types/toner";
+import type { Toner, TonerReplacement, TonerStock } from "../../types/toner";
 import type { A4Sheet } from "../../types/A4Sheet";
 import type { Gadget } from "../../types/gadget";
+import type { Printer } from "../../types/printer";
 
 const ALL = resolveRange(2026, "ALL", "", "");
 
@@ -17,6 +18,28 @@ const toner = (over: Partial<Toner> & { id: string }): Toner =>
     dateBrought: "2026-01-01",
     ...over,
   }) as Toner;
+
+const pool = (over: Partial<TonerStock> & { id: string }): TonerStock =>
+  ({
+    tonerType: "415A",
+    colorType: "Black",
+    quantity: 3,
+    dateBrought: "2026-01-01",
+    ...over,
+  }) as TonerStock;
+
+const printer = (over: Partial<Printer> & { id: string }): Printer =>
+  ({
+    location: "Travel House",
+    model: "HP LaserJet",
+    tonerType: "415A",
+    printerColorType: "black",
+    quantity: 1,
+    accessories: [],
+    status: "Active",
+    date: "2026-01-01",
+    ...over,
+  }) as Printer;
 
 const replacement = (id: string, dateReplaced: string): TonerReplacement => ({
   id,
@@ -52,6 +75,8 @@ const laptop = (over: Partial<Gadget> & { id: string }): Gadget =>
 function build(over: Partial<Parameters<typeof buildStationReport>[0]> = {}) {
   return buildStationReport({
     toners: [toner({ id: "t1" })],
+    stock: [pool({ id: "s1" })],
+    printers: [printer({ id: "p1" })],
     replacements: [],
     sheets: [sheet({ id: "a1" })],
     gadgets: [laptop({ id: "g1" })],
@@ -65,7 +90,7 @@ function build(over: Partial<Parameters<typeof buildStationReport>[0]> = {}) {
 describe("buildStationReport", () => {
   it("rolls up stock across toners and A4", () => {
     const model = build({
-      toners: [toner({ id: "t1", quantity: 3 }), toner({ id: "t2", quantity: 5, location: "Accra" })],
+      stock: [pool({ id: "s1", quantity: 3 }), pool({ id: "s2", quantity: 5, tonerType: "207A" })],
       sheets: [
         sheet({ id: "a1", currentQuantity: 2, costPerReam: 40 }),
         sheet({ id: "a2", currentQuantity: 10, costPerReam: 40, officeName: "Accra" }),
@@ -131,19 +156,17 @@ describe("buildStationReport", () => {
     expect(model.a4.low.map(s => s.officeName)).toEqual(["Accra"]);
   });
 
-  it("groups toner stock by location", () => {
+  it("counts distinct cartridge pools rather than printers or branches", () => {
     const model = build({
-      toners: [
-        toner({ id: "t1", location: "Head Office", quantity: 3 }),
-        toner({ id: "t2", location: "Head Office", quantity: 2 }),
-        toner({ id: "t3", location: "Accra", quantity: 4 }),
+      stock: [
+        pool({ id: "s1", tonerType: "415A", quantity: 3 }),
+        pool({ id: "s2", tonerType: "207A", quantity: 2 }),
+        pool({ id: "s3", tonerType: "222A", quantity: 4 }),
       ],
     });
 
-    expect(model.toners.byLocation).toEqual([
-      { location: "Head Office", lines: 2, units: 5 },
-      { location: "Accra", lines: 1, units: 4 },
-    ]);
+    expect(model.toners.lines).toBe(3);
+    expect(model.toners.unitsInStock).toBe(9);
   });
 
   it("carries the gadget report through untouched so the accepted format is reused", () => {
@@ -169,6 +192,8 @@ describe("buildStationReport", () => {
   it("holds no figures it cannot source when every dataset is empty", () => {
     const model = buildStationReport({
       toners: [],
+      stock: [],
+      printers: [],
       replacements: [],
       sheets: [],
       gadgets: [],
@@ -248,7 +273,7 @@ describe("buildStationReport activity", () => {
     const model = build({
       range: AUGUST,
       gadgets: [gadgetOn("g1", "2026-08-12"), gadgetOn("g2", "2026-06-01")],
-      toners: [toner({ id: "t1", quantity: 4, dateBrought: "2025-01-01" })],
+      stock: [pool({ id: "s1", quantity: 4 })],
     });
 
     // Both devices are still on the books today, whatever month they arrived.

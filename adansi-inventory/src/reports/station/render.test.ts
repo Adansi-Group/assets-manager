@@ -3,9 +3,10 @@ import { buildStationReport } from "./model";
 import { narrateStation } from "./narrate";
 import { renderReportPdf } from "../shared/pdf/renderPdf";
 import { resolveRange } from "../shared/period";
-import type { Toner, TonerReplacement } from "../../types/toner";
+import type { Toner, TonerReplacement, TonerStock } from "../../types/toner";
 import type { A4Sheet } from "../../types/A4Sheet";
 import type { Gadget } from "../../types/gadget";
+import type { Printer } from "../../types/printer";
 
 describe("the station report renders to a PDF", () => {
   it("draws every block the narrative produces without throwing", () => {
@@ -15,6 +16,16 @@ describe("the station report renders to a PDF", () => {
         { id:"t2", location:"Head Office", printerType:"HP Color 281", tonerType:"203A", colorType:"Cyan", quantity:0, dateBrought:"2026-01-05", status:"Critical" },
         { id:"t3", location:"Kumasi", printerType:"Canon iR2004", tonerType:"NPG-59", colorType:"Black", quantity:2, dateBrought:"2026-03-11", status:"Warning" },
       ] as Toner[],
+      stock: [
+        { id:"s1", tonerType:"59A", colorType:"Black", quantity:4, dateBrought:"2026-02-01" },
+        { id:"s2", tonerType:"203A", colorType:"Cyan", quantity:0, dateBrought:"2026-01-05", status:"Critical" },
+        { id:"s3", tonerType:"NPG-59", colorType:"Black", quantity:2, dateBrought:"2026-03-11", status:"Warning" },
+      ] as TonerStock[],
+      printers: [
+        { id:"p1", location:"Head Office", room:"Accounts", model:"HP LaserJet M404", tonerType:"59A", printerColorType:"black", quantity:1, accessories:[], status:"Active", date:"2026-02-01" },
+        { id:"p2", location:"Head Office", model:"HP Color 281", tonerType:"203A", printerColorType:"white", quantity:1, accessories:[], status:"Active", date:"2026-01-05" },
+        { id:"p3", location:"Kumasi", model:"Canon iR2004", tonerType:"NPG-59", printerColorType:"black", quantity:1, accessories:[], status:"Active", date:"2026-03-11" },
+      ] as Printer[],
       replacements: [
         { id:"r1", tonerId:"t1", location:"Head Office", room:"Accounts", printerType:"HP LaserJet M404", colorType:"Black", dateChecked:"2026-01-10", dateReplaced:"2026-01-10", previousPercentage:4, currentPercentage:100, createdAt:"2026-01-10" },
         { id:"r2", tonerId:"t1", location:"Head Office", room:"Accounts", printerType:"HP LaserJet M404", colorType:"Black", dateChecked:"2026-03-15", dateReplaced:"2026-03-15", previousPercentage:6, currentPercentage:100, createdAt:"2026-03-15" },

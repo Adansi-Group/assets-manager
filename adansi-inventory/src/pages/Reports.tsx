@@ -21,15 +21,18 @@ import { DEFAULT_TONER_REORDER_LEVEL } from "../toners/stockLevel";
 import { buildStationReport } from "../reports/station/model";
 import { narrateStation } from "../reports/station/narrate";
 import { getToners } from "../services/tonerService";
+import { getTonerStock } from "../services/tonerStockService";
+import { getPrinters } from "../services/printerService";
 import { getTonerReorderLevel } from "../services/notificationService";
 import { getAllReplacements } from "../services/Tonerreplacementservice";
 import { getA4Sheets } from "../services/a4SheetService";
 import { getInternetUsage } from "../services/internetUsageService";
 import { getGadgets } from "../services/gadgetsService";
-import type { Toner, TonerReplacement } from "../types/toner";
+import type { Toner, TonerReplacement, TonerStock } from "../types/toner";
 import type { A4Sheet } from "../types/A4Sheet";
 import type { InternetUsage } from "../types/InternetUsage";
 import type { Gadget } from "../types/gadget";
+import type { Printer } from "../types/printer";
 
 /**
  * Shown where a figure genuinely cannot be produced from the data, rather than
@@ -60,6 +63,8 @@ export default function Reports() {
   const navigate = useNavigate();
 
   const [toners, setToners] = useState<Toner[]>([]);
+  const [stock, setStock] = useState<TonerStock[]>([]);
+  const [printers, setPrinters] = useState<Printer[]>([]);
   const [replacements, setReplacements] = useState<TonerReplacement[]>([]);
   const [sheets, setSheets] = useState<A4Sheet[]>([]);
   const [internet, setInternet] = useState<InternetUsage[]>([]);
@@ -85,8 +90,10 @@ export default function Reports() {
     setLoading(true);
     setError(null);
     try {
-      const [t, r, s, i, g, level] = await Promise.all([
+      const [t, st, p, r, s, i, g, level] = await Promise.all([
         getToners(),
+        getTonerStock(),
+        getPrinters(),
         getAllReplacements(),
         getA4Sheets(),
         getInternetUsage(),
@@ -94,6 +101,8 @@ export default function Reports() {
         getTonerReorderLevel(),
       ]);
       setToners(t);
+      setStock(st);
+      setPrinters(p);
       setReplacements(r);
       setSheets(s);
       setInternet(i);
@@ -123,6 +132,8 @@ export default function Reports() {
     () =>
       buildStationReport({
         toners,
+        stock,
+        printers,
         replacements,
         sheets,
         gadgets,
@@ -130,7 +141,7 @@ export default function Reports() {
         reorderLevel,
         generatedAt: new Date().toISOString().slice(0, 10),
       }),
-    [toners, replacements, sheets, gadgets, period, reorderLevel]
+    [toners, stock, printers, replacements, sheets, gadgets, period, reorderLevel]
   );
 
   const blocks = useMemo(() => narrateStation(stationModel), [stationModel]);
@@ -158,7 +169,9 @@ export default function Reports() {
   }
 
   const categories = useMemo<Category[]>(() => {
-    const tonerUnits = toners.reduce((sum, t) => sum + (t.quantity ?? 0), 0);
+    // Quantities now live in the pooled stock, not the legacy per-printer
+    // records, so the preview cards read the same numbers the reports do.
+    const tonerUnits = stock.reduce((sum, t) => sum + (t.quantity ?? 0), 0);
     const a4Reams = sheets.reduce((sum, s) => sum + (s.currentQuantity ?? 0), 0);
     const a4Value = sheets.reduce(
       (sum, s) => sum + (s.currentQuantity ?? 0) * (s.costPerReam ?? 0),
@@ -262,7 +275,7 @@ export default function Reports() {
         ],
       },
     ];
-  }, [toners, replacements, sheets, internet, gadgets]);
+  }, [stock, replacements, sheets, internet, gadgets]);
 
   if (loading) {
     return (
