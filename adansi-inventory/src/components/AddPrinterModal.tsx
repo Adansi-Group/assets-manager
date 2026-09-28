@@ -30,6 +30,8 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
   const [room, setRoom] = useState(() => printer?.room ?? ""); // NEW: Room/office field
   const [tonerType, setTonerType] = useState(() => printer?.tonerType ?? "");
   const [tonerTypes, setTonerTypes] = useState<string[]>([]);
+  // "No toner types available" is only true once the list has loaded.
+  const [loadingTonerTypes, setLoadingTonerTypes] = useState(true);
   const [model, setModel] = useState(() => printer?.model ?? "");
   const [printerColorType, setPrinterColorType] = useState<PrinterColor | "">(() => printer?.printerColorType ?? "");
   const [quantity, setQuantity] = useState(() => printer?.quantity ?? 1);
@@ -72,7 +74,13 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
 
   // Load toner cartridge types on mount
   useEffect(() => {
-    (async () => setTonerTypes(await getAllTonerTypes()))();
+    (async () => {
+      try {
+        setTonerTypes(await getAllTonerTypes());
+      } finally {
+        setLoadingTonerTypes(false);
+      }
+    })();
   }, []);
 
   // The saved cartridge stays a visible, selected option even when it is not
@@ -271,7 +279,10 @@ export default function AddPrinterModal({ onClose, onSave, printer }: Props) {
                   </option>
                 ))}
               </select>
-              {tonerTypes.length === 0 && (
+              {loadingTonerTypes && (
+                <p className="text-sm text-gray-500 mt-1">Loading toner types…</p>
+              )}
+              {!loadingTonerTypes && tonerTypes.length === 0 && (
                 <p className="text-sm text-red-500 mt-1">
                   No toner types available. Add one from the Toners page first.
                 </p>

@@ -37,6 +37,7 @@ import {
   TONER_DELIVERIES_COLLECTION,
 } from "../services/tonerDeliveryService";
 import { accessErrorMessage } from "../toners/accessErrors";
+import { correctionHint } from "../toners/corrections";
 import { getAllTonerTypes } from "../services/tonerService";
 import Swal from "sweetalert2";
 import { AlertTriangle, Download, ChevronDown, Unlink } from "lucide-react";
@@ -508,12 +509,15 @@ export default function Toners() {
 
       await loadStock();
 
+      // A raised count may really be a delivery; say so, but do not block it.
+      const hint = existingPool ? correctionHint(existingPool.quantity, result.value) : null;
       Swal.fire({
         icon: "success",
         title: existingPool ? "Quantity Updated" : "Color Added",
-        text: `${color} toner ${existingPool ? "updated to" : "added with quantity"} ${result.value}`,
-        timer: 1500,
-        showConfirmButton: false,
+        text:
+          `${color} toner ${existingPool ? "updated to" : "added with quantity"} ${result.value}` +
+          (hint ? `. ${hint}` : ""),
+        ...(hint ? {} : { timer: 1500, showConfirmButton: false }),
       });
     } catch (error) {
       // A duplicate-pool error means this colour was created by someone else

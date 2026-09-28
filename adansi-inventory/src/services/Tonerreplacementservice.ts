@@ -35,14 +35,6 @@ export class TonerStockError extends Error {
   }
 }
 
-function stockStatus(quantity: number, initialQuantity?: number): "Good" | "Warning" | "Critical" {
-  if (!initialQuantity || initialQuantity <= 0) return quantity === 0 ? "Critical" : "Good";
-  const percentage = (quantity / initialQuantity) * 100;
-  if (percentage <= 20) return "Critical";
-  if (percentage <= 50) return "Warning";
-  return "Good";
-}
-
 type ReplacementInput = {
   dateChecked: string;
   dateReplaced: string;
@@ -99,10 +91,9 @@ export async function replacePrinterToner(
       throw new TonerStockError(`${stockColor} toner stock for ${printer.model} is empty. Add stock before recording a replacement.`);
     }
 
-    const newQuantity = currentQuantity - 1;
+    // No status is written: it is derived from the quantity on read.
     transaction.update(stockRef, {
-      quantity: newQuantity,
-      status: stockStatus(newQuantity, Number(stock.initialQuantity) || undefined),
+      quantity: currentQuantity - 1,
       lastCheckedDate: replacement.dateReplaced,
     });
 

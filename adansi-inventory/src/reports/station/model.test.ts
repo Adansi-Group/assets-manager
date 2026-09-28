@@ -134,12 +134,15 @@ describe("buildStationReport", () => {
     expect(model).not.toHaveProperty("spend");
   });
 
-  it("names the covered categories that carry no cost field at all", () => {
+  it("states the real price gap: none for gadgets, only some deliveries for toners", () => {
     const model = build();
     const purchaseCost = model.dataGaps.find(g => g.field === "Purchase cost");
 
-    expect(purchaseCost?.note).toMatch(/Gadgets and Toners/);
-    // A zero would read as "nothing was spent"; these have nowhere to record a price.
+    expect(purchaseCost?.note).toMatch(/gadgets have no price field/);
+    expect(purchaseCost?.note).toMatch(/toner price is recorded only on the deliveries/);
+    // Deliveries and pools can carry a cost now; claiming otherwise would be false.
+    expect(purchaseCost?.note).not.toMatch(/Toners have no price/i);
+    // A zero would read as "nothing was spent".
     expect(purchaseCost?.note).not.toMatch(/GHS\s*0(?![\d.])/);
   });
 

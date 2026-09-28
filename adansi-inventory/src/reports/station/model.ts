@@ -15,7 +15,7 @@ import type { A4Sheet } from "../../types/A4Sheet";
 import type { Gadget } from "../../types/gadget";
 import type { Printer } from "../../types/printer";
 import { inRange, toISODate, type Range } from "../shared/period";
-import { joinList, verbHave } from "../shared/text";
+import { verbHave } from "../shared/text";
 import { replacementIntervals } from "../shared/replacementIntervals";
 import { lowToners } from "../../toners/stockLevel";
 import { poolKey } from "../../toners/pools";
@@ -23,11 +23,6 @@ import { buildGadgetReport } from "../gadgets/buildModel";
 import type { DataGap, GadgetReportModel, Tally } from "../gadgets/model";
 import { buildConsumablesModel } from "../consumables/model";
 
-/**
- * Categories in this report that the Assets Station never prices. Naming them
- * is the point: silence would let a reader assume nothing was spent.
- */
-const UNPRICED_CATEGORIES = ["Gadgets", "Toners"] as const;
 
 export type ConsumablesModel = ReturnType<typeof buildConsumablesModel>;
 
@@ -312,9 +307,12 @@ function stationGaps(toners: TonerSection, a4: A4Section, activity: ActivitySect
   const gaps: DataGap[] = [
     {
       field: "Purchase cost",
+      // Naming the gap is the point: silence would let a reader assume
+      // nothing was spent.
       note:
-        `${joinList([...UNPRICED_CATEGORIES])} have no price field anywhere in the system, so this ` +
-        "report gives no spend figure for them rather than a zero",
+        "gadgets have no price field anywhere in the system, and a toner price is recorded only " +
+        "on the deliveries where one was entered, so this report gives no spend figure for either " +
+        "rather than a zero or a partial total",
     },
   ];
 

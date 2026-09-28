@@ -196,8 +196,9 @@ export default function Reports() {
     const internetCost = internet.reduce((sum, u) => sum + (u.cost ?? 0), 0);
     const activeInternet = internet.filter(u => u.status === "Active").length;
 
-    // Only A4 and internet carry a real cost; gadgets, printers and toners have
-    // no price field at all, so this is knowable spend, not total spend.
+    // Only A4 and internet carry a complete cost; gadgets and printers have no
+    // price field and toners are priced only on some deliveries, so this is
+    // knowable spend, not total spend.
     const knownSpend = a4Value + internetCost;
 
     return [
@@ -413,9 +414,10 @@ export default function Reports() {
           About these figures
         </p>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Gadgets, printers and toners have no purchase price field in the Assets Station, so no
-          spend total can be produced for them — those figures read “{NOT_RECORDED}” rather than
-          showing a zero. Only A4 paper, internet and general inventory carry real costs. A4 stock
+          Gadgets and printers have no purchase price field in the Assets Station, and a toner
+          price is recorded only on the deliveries where one was entered, so no spend total can be
+          produced for them — those figures read “{NOT_RECORDED}” rather than showing a zero or a
+          partial total. Only A4 paper, internet and general inventory carry real costs. A4 stock
           value is the value of paper currently on hand, not money spent in a period.
         </p>
       </div>
